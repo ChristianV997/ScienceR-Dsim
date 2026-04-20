@@ -25,11 +25,13 @@ def run_synthetic():
         {"case":"double_vortex", "Q_mean": float(Qz2.mean()), "Qabs_mean": float(Qabs2.mean())},
     ])
     validation = validate_vortex_charges()
-    df["Q_expected"] = [1.0, 2.0]
-    df["pass_charge_check"] = [
-        bool(validation["single_vortex_pass"]),
-        bool(validation["double_vortex_pass"]),
-    ]
+    expected = {"single_vortex": 1.0, "double_vortex": 2.0}
+    passes = {
+        "single_vortex": bool(validation["single_vortex_pass"]),
+        "double_vortex": bool(validation["double_vortex_pass"]),
+    }
+    df["Q_expected"] = df["case"].map(expected)
+    df["pass_charge_check"] = df["case"].map(passes)
     df.to_csv(out / "synthetic_summary.csv", index=False)
     print(df)
 

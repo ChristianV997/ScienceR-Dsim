@@ -39,5 +39,10 @@ def compute_Qz(psi3d: np.ndarray, axis: int = 2):
     return np.asarray(Qz, dtype=int), np.asarray(Qabs, dtype=float)
 
 def compute_f_dress(Qz: np.ndarray, Qabs: np.ndarray, eps: float = 1e-9) -> float:
-    """Compute a simple excess-absolute-charge ratio summary statistic."""
+    """Compute excess absolute winding relative to net winding.
+
+    This ratio is near zero when local positive/negative winding mostly cancels
+    to a coherent net topological charge, and increases when unsigned local
+    winding dominates over the signed net charge.
+    """
     return float((np.mean(Qabs) - abs(np.mean(Qz))) / (abs(np.mean(Qz)) + eps))

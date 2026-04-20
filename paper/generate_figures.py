@@ -50,7 +50,7 @@ def plot_worldlines(worldlines: dict, out: Path):
         if len(pts) < 2:
             continue
         any_line = True
-        pts = pd.DataFrame(pts, columns=["x","y","z","t"])
+        pts = pd.DataFrame(pts, columns=["x", "y", "z", "t"])
         plt.plot(pts["t"], pts["z"], alpha=0.6)
     if not any_line:
         plt.text(0.5, 0.5, "No worldline data", ha="center", va="center")

@@ -4,6 +4,8 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+DEFAULT_N_CLUSTERS = 3
+
 def _safe_read_csv(path: Path) -> pd.DataFrame:
     """Read CSV robustly, returning an empty frame for blank files."""
     if not path.exists():
@@ -65,6 +67,10 @@ def run(results_root: str | Path, output_csv: str | Path):
     if len(df):
         X = df[["Q", "Qabs"]].values
         X = StandardScaler().fit_transform(X)
-        df["cluster"] = KMeans(n_clusters=min(3, len(df)), random_state=42, n_init=10).fit_predict(X)
+        df["cluster"] = KMeans(
+            n_clusters=min(DEFAULT_N_CLUSTERS, len(df)),
+            random_state=42,
+            n_init=10,
+        ).fit_predict(X)
     df.to_csv(output_csv, index=False)
     return df

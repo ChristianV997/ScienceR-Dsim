@@ -52,7 +52,7 @@ class WorldlineTracker:
                 curr_ids[c] = lid
 
         self.prev_pos = curr_pos
-        self.prev_ids = curr_ids if len(curr_pos) else []
+        self.prev_ids = curr_ids
 
     def get(self):
         """Return worldlines as a mapping from track id to sampled 4D points."""
