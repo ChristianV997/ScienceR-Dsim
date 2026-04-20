@@ -48,7 +48,7 @@ def _preprocess(raw):
     return raw
 
 def _compute_phase_metrics(data):
-    phi = np.unwrap(np.angle(data + NUMERICAL_STABILITY_EPSILON), axis=1)
+    phi = np.unwrap(np.angle(data), axis=1)
     grad = np.diff(phi, axis=1)
     Q = float(np.sum(grad) / (2 * np.pi))
     Qabs = float(np.sum(np.abs(grad)) / (2 * np.pi))
