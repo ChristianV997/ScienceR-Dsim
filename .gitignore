@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 project_manifest.json
 paper/figures/
+*.sqlite
