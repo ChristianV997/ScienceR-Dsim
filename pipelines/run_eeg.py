@@ -3,6 +3,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from validation.pci_validation import pcist_surrogate
+
 try:
     import mne
     MNE_AVAILABLE = True
@@ -96,7 +98,7 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
             high = power[(freqs >= 12) & (freqs <= 40)].sum()
             row["spectral_ratio"] = float(high / (low + NUMERICAL_STABILITY_EPSILON))
             if compute_pci:
-                row["PCIst"] = np.nan
+                row["PCIst"] = pcist_surrogate(seg)
             rows.append(row)
 
     base_cols = [

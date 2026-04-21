@@ -4,6 +4,8 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
+from validation.pci_validation import q_pcist_correlation
+
 DEFAULT_N_CLUSTERS = 3
 
 def _safe_read_csv(path: Path) -> pd.DataFrame:
@@ -72,5 +74,22 @@ def run(results_root: str | Path, output_csv: str | Path):
             random_state=42,
             n_init=10,
         ).fit_predict(X)
+
+    # Compute Q–PCIst correlation across all EEG datasets that have PCIst
+    pci_frames = []
+    for ds in ["ds002094", "ds005620", "ds001787", "ds003969", "ds003816"]:
+        f = results_root / ds / f"metrics_{ds}.csv"
+        if not f.exists():
+            f = results_root / f"{ds}.csv"
+        tmp = _safe_read_csv(f)
+        if "PCIst" in tmp.columns and "Qabs" in tmp.columns:
+            pci_frames.append(tmp[["Qabs", "PCIst"]])
+    if pci_frames:
+        all_pci = pd.concat(pci_frames, ignore_index=True)
+        corr = q_pcist_correlation(all_pci)
+        df.attrs["q_pcist_r"] = corr.get("r")
+        df.attrs["q_pcist_p"] = corr.get("p")
+        df.attrs["q_pcist_n"] = corr.get("n")
+
     df.to_csv(output_csv, index=False)
     return df
