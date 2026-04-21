@@ -26,17 +26,25 @@ def compute_Qabs_slice(theta2d: np.ndarray) -> float:
     return float(np.sum(np.abs(q)))
 
 def compute_Qz(psi3d: np.ndarray, axis: int = 2):
-    """Compute Q and Qabs for each slice along a selected axis of a 3D field."""
+    """Compute Q and Qabs for each slice along a selected axis of a 3D field.
+
+    Vectorised implementation: operates on all slices simultaneously instead
+    of looping in Python, giving a substantial speed-up for large fields.
+    """
     psi3d = np.asarray(psi3d)
     if psi3d.ndim != 3:
         raise ValueError("psi3d must be 3D")
+    # Move the target axis to position 0 so shape is (nslices, nx, ny)
     sl = np.moveaxis(psi3d, axis, 0)
-    Qz, Qabs = [], []
-    for s in sl:
-        theta = np.angle(s)
-        Qz.append(compute_Q_slice(theta))
-        Qabs.append(compute_Qabs_slice(theta))
-    return np.asarray(Qz, dtype=int), np.asarray(Qabs, dtype=float)
+    theta = np.angle(sl)                         # (nslices, nx, ny)
+    a = wrap_phase(theta[:, 1:, :-1] - theta[:, :-1, :-1])
+    b = wrap_phase(theta[:, 1:, 1:]  - theta[:, 1:, :-1])
+    c = wrap_phase(theta[:, :-1, 1:] - theta[:, 1:, 1:])
+    d = wrap_phase(theta[:, :-1, :-1] - theta[:, :-1, 1:])
+    q = (a + b + c + d) / (2 * np.pi)           # (nslices, nx-1, ny-1)
+    Qz   = np.rint(q.sum(axis=(1, 2))).astype(int)
+    Qabs = np.abs(q).sum(axis=(1, 2))
+    return Qz, Qabs
 
 def compute_f_dress(Qz: np.ndarray, Qabs: np.ndarray, eps: float = 1e-9) -> float:
     """Compute excess absolute winding relative to net winding.

@@ -7,10 +7,9 @@ def bootstrap_ci(x, n=2000, seed=0):
     x = np.asarray(x, dtype=float)
     if len(x) == 0:
         return (np.nan, np.nan)
-    means = []
-    for _ in range(n):
-        s = rng.choice(x, size=len(x), replace=True)
-        means.append(float(np.mean(s)))
+    # Vectorised: draw all (n × len(x)) indices at once to avoid a Python loop
+    idx = rng.integers(0, len(x), size=(n, len(x)))
+    means = x[idx].mean(axis=1)
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
 
 def cohens_d(a, b):
