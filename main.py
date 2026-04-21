@@ -68,6 +68,11 @@ def main():
         df = run_physionet(args.input, out_path)
         print(df.head())
     elif args.mode == "physics":
+        input_path = Path(args.input)
+        if not input_path.exists() or not input_path.is_file():
+            ap.error(f"--mode physics requires --input to point to an existing .npy file (got: {args.input})")
+        if input_path.suffix != ".npy":
+            ap.error(f"--mode physics requires a .npy input file (got: {args.input})")
         df = run_from_npy(args.input, args.output)
         print(df.head())
     elif args.mode == "cross-domain":

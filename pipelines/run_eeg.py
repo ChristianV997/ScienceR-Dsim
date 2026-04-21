@@ -81,6 +81,7 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
             if seg.shape[1] < MIN_SEGMENT_SAMPLES:
                 continue
             Q, Qabs, pg = _compute_phase_metrics(seg)
+            f_dress = float((Qabs - abs(Q)) / (abs(Q) + NUMERICAL_STABILITY_EPSILON))
             row = {
                 "dataset": dataset,
                 "file": str(f),
@@ -89,6 +90,7 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
                 "Q": Q,
                 "Qabs": Qabs,
                 "phase_grad": pg,
+                "f_dress": f_dress,
             }
             mean_sig = np.mean(seg, axis=0)
             fft = np.fft.rfft(mean_sig)
@@ -103,7 +105,7 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
 
     base_cols = [
         "dataset", "file", "start_sample", "stop_sample",
-        "Q", "Qabs", "phase_grad", "spectral_ratio",
+        "Q", "Qabs", "phase_grad", "f_dress", "spectral_ratio",
     ]
     if compute_pci:
         base_cols.append("PCIst")
