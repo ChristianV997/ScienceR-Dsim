@@ -12,6 +12,7 @@ from analysis.qzt import compute_qzt
 from pipelines.run_eeg import run as run_eeg
 from pipelines.run_physics import run_from_npy
 from pipelines.run_cross_domain import run as run_cross_domain
+from pipelines.run_physionet import run as run_physionet
 from database.database import connect, start_run, finish_run, add_metric, add_artifact
 
 def run_synthetic():
@@ -55,7 +56,7 @@ def run_qzt(checkpoint_dir: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physics", "cross-domain", "db"])
+    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physionet", "physics", "cross-domain", "db"])
     ap.add_argument("--input", default="data/checkpoints")
     ap.add_argument("--output", default="results/out.csv")
     ap.add_argument("--dataset", default="ds002094")
@@ -69,7 +70,14 @@ def main():
     elif args.mode == "qzt":
         run_qzt(args.input)
     elif args.mode == "eeg":
-        df = run_eeg(args.input, args.output, dataset=args.dataset, compute_pci=args.compute_pci)
+        default_out = Path("results") / args.dataset / f"metrics_{args.dataset}.csv"
+        out_path = args.output if args.output != "results/out.csv" else str(default_out)
+        df = run_eeg(args.input, out_path, dataset=args.dataset, compute_pci=args.compute_pci)
+        print(df.head())
+    elif args.mode == "physionet":
+        default_out = Path("results") / "physionet_gaba" / "metrics_physionet_gaba.csv"
+        out_path = args.output if args.output != "results/out.csv" else str(default_out)
+        df = run_physionet(args.input, out_path)
         print(df.head())
     elif args.mode == "physics":
         df = run_from_npy(args.input, args.output)
