@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from database.database import connect, start_run, finish_run, add_metric, add_artifact
+from database.database import connect, start_run, finish_run, add_metric, add_artifact, add_sensor_record
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def test_connect_creates_tables(db):
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()
     }
-    assert {"runs", "metrics", "artifacts"}.issubset(tables)
+    assert {"runs", "metrics", "artifacts", "sensor_data"}.issubset(tables)
 
 
 def test_run_lifecycle(db):
@@ -69,3 +69,23 @@ def test_multiple_runs_independent(db):
         "SELECT value FROM metrics WHERE run_id=?", (rid2,)
     ).fetchone()[0]
     assert v1 == 1.0 and v2 == 2.0
+
+
+def test_sensor_record_stored(db):
+    rid = start_run(db, "sensor_run", "integration")
+    add_sensor_record(
+        db,
+        run_id=rid,
+        timestamp=1.23,
+        sensor_id="sensor-A",
+        protocol="file",
+        payload={"Q": 1, "Qabs": 1},
+        q=1.0,
+        qabs=1.0,
+        source="tmp/live.jsonl",
+    )
+    row = db.execute(
+        "SELECT sensor_id, protocol, q, qabs FROM sensor_data WHERE run_id=?",
+        (rid,),
+    ).fetchone()
+    assert row == ("sensor-A", "file", 1.0, 1.0)

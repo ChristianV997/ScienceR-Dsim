@@ -11,6 +11,7 @@ from pipelines.run_eeg import run as run_eeg
 from pipelines.run_physics import run_from_npy
 from pipelines.run_cross_domain import run as run_cross_domain
 from pipelines.run_physionet import run as run_physionet
+from pipelines.run_external import run as run_external
 from database.database import connect, start_run, finish_run, add_metric, add_artifact
 
 def run_synthetic():
@@ -44,13 +45,15 @@ def run_qzt(checkpoint_dir: str):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physionet", "physics", "cross-domain", "db"])
+    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physionet", "physics", "cross-domain", "external", "db"])
     ap.add_argument("--input", default="data/checkpoints")
     ap.add_argument("--output", default="results/out.csv")
     ap.add_argument("--dataset", default="ds002094")
     ap.add_argument("--results-root", default="results")
     ap.add_argument("--compute-pci", action="store_true")
     ap.add_argument("--db", default="data/runs.sqlite")
+    ap.add_argument("--config", default="config/defaults.yaml")
+    ap.add_argument("--max-records", type=int, default=None)
     args = ap.parse_args()
 
     if args.mode == "synthetic":
@@ -77,6 +80,9 @@ def main():
         print(df.head())
     elif args.mode == "cross-domain":
         df = run_cross_domain(args.results_root, args.output)
+        print(df.head())
+    elif args.mode == "external":
+        df = run_external(args.config, args.output, args.db, max_records=args.max_records)
         print(df.head())
     elif args.mode == "db":
         conn = connect(args.db)

@@ -11,3 +11,16 @@ datasets:
   ds003816: {kind: eeg_state}
   physionet_gaba: {kind: spectral}
   the_well: {kind: physics}
+external:
+  connectors:
+    - type: file
+      params:
+        path: data/raw/sensors/live_sensor.jsonl
+        sensor_id: sim_sensor
+    # Optional protocol adapters (require optional dependencies when used):
+    # - type: rest
+    #   params: {url: http://localhost:8000/sensor}
+    # - type: mqtt
+    #   params: {host: localhost, topic: sensors/live}
+    # - type: websocket
+    #   params: {url: ws://localhost:8765}

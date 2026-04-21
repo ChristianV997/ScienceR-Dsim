@@ -9,6 +9,7 @@ Integrated topological field simulation + EEG validation system.
 - Synthetic validation
 - EEG / PCI validation hooks
 - Physics hooks (The Well)
+- External ecosystem connectors (file/REST/MQTT/WebSocket)
 - SQLite registry
 - Paper figure generation
 
@@ -23,7 +24,17 @@ python main.py --mode qzt --input data/checkpoints
 python main.py --mode eeg --dataset ds002094 --input data/raw/ds002094 --output results/ds002094.csv --compute-pci
 python main.py --mode physics --input /path/to/sample.npy --output results/the_well.csv
 python main.py --mode cross-domain --results-root results --output results/cross_domain.csv
+python main.py --mode external --config config/defaults.yaml --output results/live_sensors.csv --db data/runs.sqlite --max-records 100
 python paper/generate_figures.py --results-root results --output-dir paper/figures
 ```
 
 `--mode qzt` writes `results/qzt.csv`, `results/events.csv`, and `results/worldlines.json`.
+
+## External systems and live sensors
+- Configure connectors in `config/defaults.yaml` under `external.connectors`.
+- Supported connector types:
+  - `file` for newline-delimited JSON sensor streams (works out of the box)
+  - `rest` for HTTP JSON polling
+  - `mqtt` for topic ingestion (requires `paho-mqtt`)
+  - `websocket` for socket streams (requires `websocket-client`)
+- External ingestion logs records and metrics into SQLite (`sensor_data`, `metrics`, `runs`) for traceability and reproducibility.

@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS artifacts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER, path TEXT, kind TEXT, note TEXT
 );
+CREATE TABLE IF NOT EXISTS sensor_data (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER,
+  timestamp REAL,
+  sensor_id TEXT,
+  protocol TEXT,
+  source TEXT,
+  payload_json TEXT,
+  q REAL,
+  qabs REAL
+);
 """
 
 def connect(db_path: str | Path):
@@ -50,5 +61,22 @@ def add_artifact(conn, run_id: int, path: str | Path, kind: str = "", note: str 
     conn.execute(
         "INSERT INTO artifacts(run_id,path,kind,note) VALUES(?,?,?,?)",
         (run_id, str(path), kind, note),
+    )
+    conn.commit()
+
+def add_sensor_record(
+    conn,
+    run_id: int,
+    timestamp: float,
+    sensor_id: str,
+    protocol: str,
+    payload: dict,
+    q: float,
+    qabs: float,
+    source: str = "",
+):
+    conn.execute(
+        "INSERT INTO sensor_data(run_id,timestamp,sensor_id,protocol,source,payload_json,q,qabs) VALUES(?,?,?,?,?,?,?,?)",
+        (run_id, float(timestamp), sensor_id, protocol, source, json.dumps(payload), float(q), float(qabs)),
     )
     conn.commit()
