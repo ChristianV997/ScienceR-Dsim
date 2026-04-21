@@ -4,6 +4,7 @@ import pandas as pd
 from scipy.stats import pearsonr
 
 def pcist_surrogate(epoch_2d):
+    """Compute a lightweight PCIst-style surrogate from an epoch matrix."""
     x = np.mean(epoch_2d, axis=0)
     z = (x - np.mean(x)) / (np.std(x) + 1e-12)
     b = (z > 0).astype(np.int8)

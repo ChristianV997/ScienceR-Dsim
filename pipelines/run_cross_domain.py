@@ -6,16 +6,30 @@ from sklearn.preprocessing import StandardScaler
 
 from validation.pci_validation import q_pcist_correlation
 
+DEFAULT_N_CLUSTERS = 3
+
+def _safe_read_csv(path: Path) -> pd.DataFrame:
+    """Read CSV robustly, returning an empty frame for blank files."""
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
 
 def run(results_root: str | Path, output_csv: str | Path):
+    """Aggregate available domain metrics and attach simple unsupervised clusters."""
     results_root = Path(results_root)
     output_csv = Path(output_csv)
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
     rows = []
 
     for ds in ["ds002094", "ds005620", "ds001787", "ds003969", "ds003816"]:
         f = results_root / ds / f"metrics_{ds}.csv"
+        if not f.exists():
+            f = results_root / f"{ds}.csv"
         if f.exists():
-            df = pd.read_csv(f)
+            df = _safe_read_csv(f)
             if len(df):
                 rows.append({
                     "dataset": ds,
@@ -27,40 +41,49 @@ def run(results_root: str | Path, output_csv: str | Path):
 
     f = results_root / "physionet_gaba" / "metrics_physionet_gaba.csv"
     if f.exists():
-        df = pd.read_csv(f)
-        rows.append({
-            "dataset": "physionet_gaba",
-            "domain": "brain_like_signal",
-            "Q": float(df["Q_proxy"].mean()) if "Q_proxy" in df.columns else None,
-            "Qabs": float(df["Qabs_proxy"].mean()) if "Qabs_proxy" in df.columns else None,
-            "phase_grad": None,
-        })
+        df = _safe_read_csv(f)
+        if len(df):
+            rows.append({
+                "dataset": "physionet_gaba",
+                "domain": "brain_like_signal",
+                "Q": float(df["Q_proxy"].mean()) if "Q_proxy" in df.columns else None,
+                "Qabs": float(df["Qabs_proxy"].mean()) if "Qabs_proxy" in df.columns else None,
+                "phase_grad": None,
+            })
 
     f = results_root / "the_well" / "metrics_the_well.csv"
+    if not f.exists():
+        f = results_root / "the_well.csv"
     if f.exists():
-        df = pd.read_csv(f)
-        rows.append({
-            "dataset": "the_well",
-            "domain": "physics",
-            "Q": float(df["Q"].mean()) if "Q" in df.columns else None,
-            "Qabs": float(df["Qabs"].mean()) if "Qabs" in df.columns else None,
-            "phase_grad": None,
-        })
+        df = _safe_read_csv(f)
+        if len(df):
+            rows.append({
+                "dataset": "the_well",
+                "domain": "physics",
+                "Q": float(df["Q"].mean()) if "Q" in df.columns else None,
+                "Qabs": float(df["Qabs"].mean()) if "Qabs" in df.columns else None,
+                "phase_grad": None,
+            })
 
     df = pd.DataFrame(rows).dropna()
     if len(df):
         X = df[["Q", "Qabs"]].values
         X = StandardScaler().fit_transform(X)
-        df["cluster"] = KMeans(n_clusters=min(3, len(df)), random_state=42, n_init=10).fit_predict(X)
+        df["cluster"] = KMeans(
+            n_clusters=min(DEFAULT_N_CLUSTERS, len(df)),
+            random_state=42,
+            n_init=10,
+        ).fit_predict(X)
 
     # Compute Q–PCIst correlation across all EEG datasets that have PCIst
     pci_frames = []
     for ds in ["ds002094", "ds005620", "ds001787", "ds003969", "ds003816"]:
         f = results_root / ds / f"metrics_{ds}.csv"
-        if f.exists():
-            tmp = pd.read_csv(f)
-            if "PCIst" in tmp.columns and "Qabs" in tmp.columns:
-                pci_frames.append(tmp[["Qabs", "PCIst"]])
+        if not f.exists():
+            f = results_root / f"{ds}.csv"
+        tmp = _safe_read_csv(f)
+        if "PCIst" in tmp.columns and "Qabs" in tmp.columns:
+            pci_frames.append(tmp[["Qabs", "PCIst"]])
     if pci_frames:
         all_pci = pd.concat(pci_frames, ignore_index=True)
         corr = q_pcist_correlation(all_pci)

@@ -10,6 +10,7 @@ from tracking.worldlines import WorldlineTracker
 from core.defects import detect_defects
 
 def run(checkpoint_dir: str | Path, output_dir: str | Path):
+    """Run Q(z,t), event extraction, and defect worldline tracking."""
     checkpoint_dir = Path(checkpoint_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

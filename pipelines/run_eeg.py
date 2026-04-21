@@ -11,6 +11,9 @@ try:
 except Exception:
     MNE_AVAILABLE = False
 
+NUMERICAL_STABILITY_EPSILON = 1e-12
+MIN_SEGMENT_SAMPLES = 8
+
 def _load_raw(path: Path):
     if not MNE_AVAILABLE:
         return None
@@ -47,13 +50,14 @@ def _preprocess(raw):
     return raw
 
 def _compute_phase_metrics(data):
-    phi = np.unwrap(np.angle(data + 1e-12), axis=1)
+    phi = np.unwrap(np.angle(data), axis=1)
     grad = np.diff(phi, axis=1)
     Q = float(np.sum(grad) / (2 * np.pi))
     Qabs = float(np.sum(np.abs(grad)) / (2 * np.pi))
     return Q, Qabs, float(np.mean(np.abs(grad)))
 
 def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci: bool = False):
+    """Run EEG preprocessing/feature extraction and save per-window metrics."""
     input_dir = Path(input_dir)
     output_csv = Path(output_csv)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -70,9 +74,11 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
         sf = float(raw.info["sfreq"])
         win = int(4 * sf)
         step = int(2 * sf)
-        for s in range(0, max(1, raw.n_times - win), step):
+        if raw.n_times < win:
+            continue
+        for s in range(0, raw.n_times - win + 1, step):
             seg = raw.get_data(start=s, stop=s + win)
-            if seg.shape[1] < 8:
+            if seg.shape[1] < MIN_SEGMENT_SAMPLES:
                 continue
             Q, Qabs, pg = _compute_phase_metrics(seg)
             row = {
@@ -90,11 +96,17 @@ def run(input_dir: str | Path, output_csv: str | Path, dataset: str, compute_pci
             freqs = np.fft.rfftfreq(mean_sig.size, d=1.0 / sf)
             low = power[(freqs >= 1) & (freqs < 8)].sum()
             high = power[(freqs >= 12) & (freqs <= 40)].sum()
-            row["spectral_ratio"] = float(high / (low + 1e-12))
+            row["spectral_ratio"] = float(high / (low + NUMERICAL_STABILITY_EPSILON))
             if compute_pci:
                 row["PCIst"] = pcist_surrogate(seg)
             rows.append(row)
 
-    df = pd.DataFrame(rows)
+    base_cols = [
+        "dataset", "file", "start_sample", "stop_sample",
+        "Q", "Qabs", "phase_grad", "spectral_ratio",
+    ]
+    if compute_pci:
+        base_cols.append("PCIst")
+    df = pd.DataFrame(rows, columns=base_cols)
     df.to_csv(output_csv, index=False)
     return df

@@ -1,14 +1,12 @@
 from __future__ import annotations
-import argparse, json
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from validation.synthetic import single_vortex, double_vortex
+from validation.synthetic import single_vortex, double_vortex, validate_vortex_charges
 from core.topology import compute_Qz
-from core.defects import detect_defects
-from tracking.worldlines import WorldlineTracker
-from analysis.qzt import compute_qzt
+from pipelines.run_qzt import run as run_qzt_pipeline
 from pipelines.run_eeg import run as run_eeg
 from pipelines.run_physics import run_from_npy
 from pipelines.run_cross_domain import run as run_cross_domain
@@ -16,6 +14,7 @@ from pipelines.run_physionet import run as run_physionet
 from database.database import connect, start_run, finish_run, add_metric, add_artifact
 
 def run_synthetic():
+    """Run synthetic validation checks and save summary metrics."""
     out = Path("results/synthetic")
     out.mkdir(parents=True, exist_ok=True)
     psi = single_vortex()
@@ -26,33 +25,22 @@ def run_synthetic():
         {"case":"single_vortex", "Q_mean": float(Qz1.mean()), "Qabs_mean": float(Qabs1.mean())},
         {"case":"double_vortex", "Q_mean": float(Qz2.mean()), "Qabs_mean": float(Qabs2.mean())},
     ])
+    validation = validate_vortex_charges()
+    expected = {"single_vortex": 1.0, "double_vortex": 2.0}
+    passes = {
+        "single_vortex": bool(validation["single_vortex_pass"]),
+        "double_vortex": bool(validation["double_vortex_pass"]),
+    }
+    df["Q_expected"] = df["case"].map(expected)
+    df["pass_charge_check"] = df["case"].map(passes)
     df.to_csv(out / "synthetic_summary.csv", index=False)
     print(df)
 
 def run_qzt(checkpoint_dir: str):
-    out = Path("results/qzt")
-    out.mkdir(parents=True, exist_ok=True)
-    checkpoints = []
-    for p in sorted(Path(checkpoint_dir).rglob("psi.npy")):
-        psi = np.load(p)
-        meta_p = p.parent / "meta.json"
-        t = float(len(checkpoints))
-        if meta_p.exists():
-            try:
-                meta = json.loads(meta_p.read_text())
-                t = float(meta.get("t", meta.get("step", t)))
-            except Exception:
-                pass
-        checkpoints.append((t, psi))
-    qzt = compute_qzt(checkpoints)
-    qzt.to_csv(out / "qzt.csv", index=False)
-    tracker = WorldlineTracker()
-    for t, psi in checkpoints:
-        defects = detect_defects(psi)
-        tracker.update(defects, t)
-    with open(out / "worldlines.json", "w", encoding="utf-8") as f:
-        json.dump(tracker.get(), f, indent=2)
-    print("wrote", out)
+    """Run QZT pipeline and write outputs into results root."""
+    out = Path("results")
+    qzt, events = run_qzt_pipeline(checkpoint_dir, out)
+    print(f"wrote {out} (qzt={len(qzt)}, events={len(events)})")
 
 def main():
     ap = argparse.ArgumentParser()
