@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 import time
 from pathlib import Path
 from typing import Callable, Iterable
@@ -10,6 +11,10 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 from core.topology import compute_Q_slice, compute_Qabs_slice, compute_Qz, compute_f_dress
+
+MIN_MQTT_KEEPALIVE_S = 5
+MQTT_KEEPALIVE_BUFFER_S = 5
+F_DRESS_EPSILON = 1e-9
 
 
 @dataclass
@@ -117,6 +122,7 @@ class MQTTSensorConnector(BaseSensorConnector):
 
         records: list[dict] = []
 
+        # Callback signature is defined by paho-mqtt.
         def _on_message(client, userdata, msg):
             try:
                 records.append(json.loads(msg.payload.decode("utf-8")))
@@ -125,7 +131,10 @@ class MQTTSensorConnector(BaseSensorConnector):
 
         client = mqtt.Client()
         client.on_message = _on_message
-        client.connect(self.host, self.port, keepalive=max(5, int(self.timeout_s)))
+        # Keepalive must be at least a few seconds to avoid fast disconnect loops.
+        # Keepalive is set above timeout to reduce premature disconnect risk while waiting for messages.
+        keepalive = max(MIN_MQTT_KEEPALIVE_S, int(math.ceil(self.timeout_s)) + MQTT_KEEPALIVE_BUFFER_S)
+        client.connect(self.host, self.port, keepalive=keepalive)
         client.subscribe(self.topic)
         client.loop_start()
         deadline = time.time() + self.timeout_s
@@ -206,34 +215,38 @@ def build_default_registry() -> ConnectorRegistry:
     return reg
 
 
+def _compute_f_dress_scalar(q: float, qabs: float, eps: float = F_DRESS_EPSILON) -> float:
+    return float((qabs - abs(q)) / (abs(q) + eps))
+
+
 def extract_topology_metrics(payload: dict) -> dict:
     """Extract Q/Qabs/f_dress from sensor payloads in common formats."""
     if "Q" in payload and "Qabs" in payload:
         q = float(payload["Q"])
         qabs = float(payload["Qabs"])
-        f_dress = float(payload.get("f_dress", (qabs - abs(q)) / (abs(q) + 1e-9)))
+        f_dress = float(payload.get("f_dress", _compute_f_dress_scalar(q, qabs)))
         return {"Q": q, "Qabs": qabs, "f_dress": f_dress}
 
     if "theta2d" in payload:
         theta = np.asarray(payload["theta2d"], dtype=float)
         q = float(compute_Q_slice(theta))
         qabs = float(compute_Qabs_slice(theta))
-        return {"Q": q, "Qabs": qabs, "f_dress": float((qabs - abs(q)) / (abs(q) + 1e-9))}
+        return {"Q": q, "Qabs": qabs, "f_dress": _compute_f_dress_scalar(q, qabs)}
 
     if "psi3d" in payload:
         psi = np.asarray(payload["psi3d"])
         if np.isrealobj(psi):
-            psi = psi.astype(float) * np.exp(1j * np.zeros_like(psi, dtype=float))
+            psi = psi.astype(complex)
         qz, qabs = compute_Qz(psi)
         q = float(np.mean(qz))
-        qa = float(np.mean(qabs))
-        return {"Q": q, "Qabs": qa, "f_dress": float(compute_f_dress(qz, qabs))}
+        qabs_mean = float(np.mean(qabs))
+        return {"Q": q, "Qabs": qabs_mean, "f_dress": float(compute_f_dress(qz, qabs))}
 
     phase_deltas = payload.get("phase_deltas")
     if phase_deltas is not None:
         arr = np.asarray(phase_deltas, dtype=float)
         q = float(np.sum(arr) / (2 * np.pi))
         qabs = float(np.sum(np.abs(arr)) / (2 * np.pi))
-        return {"Q": q, "Qabs": qabs, "f_dress": float((qabs - abs(q)) / (abs(q) + 1e-9))}
+        return {"Q": q, "Qabs": qabs, "f_dress": _compute_f_dress_scalar(q, qabs)}
 
     return {"Q": 0.0, "Qabs": 0.0, "f_dress": 0.0}

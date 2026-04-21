@@ -9,6 +9,8 @@ import yaml
 from database.database import add_metric, add_sensor_record, connect, finish_run, start_run
 from external.ecosystem import build_default_registry, extract_topology_metrics
 
+EXTERNAL_COLUMNS = ["timestamp", "sensor_id", "protocol", "source", "Q", "Qabs", "f_dress"]
+
 
 def run(config_path: str | Path, output_csv: str | Path, db_path: str | Path, max_records: int | None = None) -> pd.DataFrame:
     """Ingest live or batch sensor data from configured external connectors."""
@@ -35,9 +37,9 @@ def run(config_path: str | Path, output_csv: str | Path, db_path: str | Path, ma
                     "sensor_id": rec.sensor_id,
                     "protocol": rec.protocol,
                     "source": rec.source,
-                    "Q": float(metrics["Q"]),
-                    "Qabs": float(metrics["Qabs"]),
-                    "f_dress": float(metrics["f_dress"]),
+                    "Q": metrics["Q"],
+                    "Qabs": metrics["Qabs"],
+                    "f_dress": metrics["f_dress"],
                 }
                 rows.append(row)
                 add_sensor_record(
@@ -57,7 +59,7 @@ def run(config_path: str | Path, output_csv: str | Path, db_path: str | Path, ma
         finish_run(conn, run_id, status="finished")
         conn.close()
 
-    df = pd.DataFrame(rows, columns=["timestamp", "sensor_id", "protocol", "source", "Q", "Qabs", "f_dress"])
+    df = pd.DataFrame(rows, columns=EXTERNAL_COLUMNS)
     df.to_csv(output_csv, index=False)
     Path(str(output_csv) + ".meta.json").write_text(
         json.dumps({"records": len(df), "config": str(config_path), "db": str(db_path)}, indent=2),

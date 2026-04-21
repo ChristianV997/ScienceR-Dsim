@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pandas as pd
+import yaml
 
 from external.ecosystem import build_default_registry, extract_topology_metrics
 from pipelines.run_external import run
@@ -28,7 +30,13 @@ def test_run_external_file_connector_and_db_logging(tmp_path):
     sensor_path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
 
     cfg_path = tmp_path / "cfg.yaml"
-    cfg_path.write_text("external:\n  connectors:\n    - type: file\n      params:\n        path: " + str(sensor_path) + "\n", encoding="utf-8")
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {"external": {"connectors": [{"type": "file", "params": {"path": str(sensor_path)}}]}},
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
     out_csv = tmp_path / "live.csv"
     db_path = tmp_path / "runs.sqlite"
@@ -40,7 +48,6 @@ def test_run_external_file_connector_and_db_logging(tmp_path):
     assert out_csv.exists()
     assert (tmp_path / "live.csv.meta.json").exists()
 
-    import sqlite3
     conn = sqlite3.connect(db_path)
     try:
         n = conn.execute("SELECT COUNT(*) FROM sensor_data").fetchone()[0]
