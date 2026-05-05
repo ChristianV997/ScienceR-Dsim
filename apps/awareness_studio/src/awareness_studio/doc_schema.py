@@ -9,6 +9,7 @@ class Document:
     source_kind: str
     headings: List[str]
     raw_text: str
+    doc_id: str = ""
 
 
 @dataclass
