@@ -62,6 +62,14 @@ TOOLS_MAX_CALLS_PER_REQUEST: int = int(os.getenv("TOOLS_MAX_CALLS_PER_REQUEST", 
 LINEAR_API_KEY: str = os.getenv("LINEAR_API_KEY", "")
 PUBMED_API_KEY: str = os.getenv("PUBMED_API_KEY", "")  # optional; improves rate limits
 
+# ── Web / CORS ────────────────────────────────────────────────────────────────
+CORS_ALLOW_ORIGINS: str = os.getenv("CORS_ALLOW_ORIGINS", "")  # e.g. "*" or "https://myapp.com"
+
+# ── Airtable Ops Mirror ───────────────────────────────────────────────────────
+AIRTABLE_ENABLED: bool = os.getenv("AIRTABLE_ENABLED", "false").lower() == "true"
+AIRTABLE_API_KEY: str = os.getenv("AIRTABLE_API_KEY", "")
+AIRTABLE_BASE_ID: str = os.getenv("AIRTABLE_BASE_ID", "")
+
 # ── Backward-compat shims ────────────────────────────────────────────────────
 LLM_MODEL: str = ANTHROPIC_MODEL if LLM_PROVIDER == "anthropic" else OPENAI_MODEL
 LLM_API_KEY: str = ANTHROPIC_API_KEY if LLM_PROVIDER == "anthropic" else OPENAI_API_KEY
