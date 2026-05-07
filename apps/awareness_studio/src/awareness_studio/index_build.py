@@ -37,21 +37,33 @@ def _load_docs_or_exit(inputs_dir: Path) -> list:
     if not inputs_dir.exists():
         logger.warning(
             "Inputs directory not found: %s\n"
-            "Create it and drop Notion-exported .md files there, then run again.",
-            inputs_dir,
+            "  mkdir -p %s && cp your_exports/*.md %s/\n"
+            "  Then re-run: awareness-index --force",
+            inputs_dir, inputs_dir, inputs_dir,
         )
         return []
-    md_files = list(inputs_dir.glob("*.md"))
+    # Use rglob to discover files recursively (Notion exports nested folders)
+    md_files = list(inputs_dir.rglob("*.md"))
     if not md_files:
         logger.warning(
-            "No .md files found in %s\n"
-            "Export Notion pages as Markdown, place them there, and run:\n"
-            "  python -m awareness_studio.index_build --force",
+            "No .md files found in %s (searched recursively)\n"
+            "  Export Notion pages as Markdown → drop into that directory → run:\n"
+            "  awareness-index --force",
             inputs_dir,
         )
         return []
     docs = load_documents(inputs_dir)
-    logger.info("Loaded %d document(s) from %s", len(docs), inputs_dir)
+    if not docs:
+        logger.warning("All .md files were skipped (meta-only). Add content pages.")
+        return []
+
+    from collections import Counter
+    kind_counts = Counter(d.source_kind for d in docs)
+    logger.info(
+        "Loaded %d document(s) from %s  [%s]",
+        len(docs), inputs_dir,
+        "  ".join(f"{k}×{v}" for k, v in sorted(kind_counts.items())),
+    )
     return docs
 
 
