@@ -7,11 +7,38 @@ Integrated topological field simulation + EEG validation system.
 - Defect extraction and worldline tracking
 - Reconnection/event detection
 - Synthetic validation
-- EEG / PCI validation hooks
+- EEG analytic-phase proxies + null-control scaffold (exploratory; see "Scientific status" below)
 - Physics hooks (The Well)
 - External ecosystem connectors (file/REST/MQTT/WebSocket)
 - SQLite registry
 - Paper figure generation
+
+## Scientific status (EEG)
+
+EEG metrics emitted by `pipelines/run_eeg.py` are **exploratory analytic-phase
+proxies**, not validated consciousness biomarkers and not clinical observables.
+The pipeline currently emits two kinds of rows per window:
+
+- `metric_kind = "analytic_phase_proxy"` — Hilbert analytic phase per band
+  (delta/theta/alpha/beta/gamma_low), gradient over channel order. The channel
+  axis is **not** a true spatial coordinate; this is a coarse proxy.
+- `metric_kind = "temporal_phase_proxy"` — legacy direct `np.angle` path,
+  retained only as a documented baseline for backward comparison.
+
+A montage-aware 2D phase grid is supported by
+`validation.analytic_phase.phase_grid_topology_metrics`, but the EEG runner
+does not yet build such a grid from real sensor positions; that is future
+work. `validation/nulls.py` provides deterministic surrogate transforms
+(channel shuffle, time reverse, spectrum-preserving phase randomization) for
+null-control comparison; full null export is a follow-up PR.
+
+The PCIst-style complexity column has been renamed `pcist_proxy` to make
+clear it is **not** the canonical PCIst measure. The legacy `pcist_surrogate`
+function is retained as a deprecated alias.
+
+Promotion of any EEG-derived Q / Qabs / f_dress to a validated structural
+finding requires (a) montage-aware phase-grid topology, (b) null-control
+comparison, and (c) labeled state-change validation (e.g. LOC/ROC).
 
 ## Note
 Datasets are not embedded. Place them under `data/raw/` using the paths in `data/README.md`.
