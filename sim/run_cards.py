@@ -160,9 +160,15 @@ def build_run_record(
     ts_compact = _compact_ts(now)
     stem = _artifact_stem(ts_compact, run_id)
 
+    def _repo_rel(p: Path) -> str:
+        try:
+            return str(p.relative_to(_REPO_ROOT))
+        except ValueError:
+            return str(p)
+
     artifacts: Dict[str, str] = {
-        "md_path": f"outputs/run_cards/{stem}.md",
-        "json_path": f"outputs/run_cards/{stem}.run.json",
+        "md_path": _repo_rel(_out_dir / f"{stem}.md"),
+        "json_path": _repo_rel(_out_dir / f"{stem}.run.json"),
     }
 
     record = RunRecord(
