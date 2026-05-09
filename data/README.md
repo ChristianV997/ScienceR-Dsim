@@ -22,9 +22,12 @@ proxies**, not validated consciousness biomarkers. Each window-row carries a
   phase field.
 - `null_channel_shuffle` / `null_time_reverse` / `null_phase_randomized` —
   deterministic null-control rows emitted when `compute_nulls=True`. Each null
-  row carries `null_method` and `null_seed` for traceability. Null rows are
-  controls for artifact sensitivity; observed metrics must separate from null
-  distributions before any structural claim can be made.
+  row carries `null_method`, `null_seed` (the base seed argument passed to
+  `run()`), and `window_null_seed` (a sha256-derived per-window seed used for
+  the actual transform). Null rows are controls for artifact sensitivity;
+  observed metrics must separate from null distributions before any structural
+  claim can be made. `compute_nulls=True` increases the output row count by
+  approximately 4× (one observed row + three null rows per band per window).
 
 Q / Qabs / f_dress reported on those rows are proxy summaries. They are not
 validated consciousness observables and require null-control comparison
@@ -38,5 +41,6 @@ remains as an alias for backward compatibility.
 Future work:
 - Montage-aware 2D phase-grid interpolation feeding
   `phase_grid_topology_metrics`.
-- Wire deterministic null surrogates into per-window CSV output.
-- LOC/ROC and seizure-state validation against `state_label`.
+- Automated null-summary artifacts (z-score separation tables) using
+  `validation.nulls.compute_null_summary`.
+- LOC/ROC and seizure-state validation stratified by `state_label`.

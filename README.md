@@ -35,11 +35,17 @@ analytic band and window:
 - `metric_kind = "null_phase_randomized"` — spectrum-preserving phase
   randomization (preserves power spectrum, randomizes phase).
 
-Null rows carry `null_method` and `null_seed` columns for traceability. They
-are deterministic: the same `null_seed` + file + window always produces
-identical null rows. These are controls for artifact sensitivity, not proof
-of validity. Observed metrics must separate from null distributions before
-any structural claim can be made.
+Null rows carry `null_method`, `null_seed` (the base seed argument passed to
+`run()`), and `window_null_seed` (a sha256-derived per-window seed, stable
+across processes, that was actually used for the null transform) for
+traceability. They are deterministic: the same `null_seed` + file + window
+always produces identical null rows. These are controls for artifact
+sensitivity, not proof of validity. Observed metrics must separate from null
+distributions before any structural claim can be made.
+
+**Memory note:** `compute_nulls=True` increases output row count by
+approximately 4× (one observed row + three null rows per band per window).
+Long recordings should be chunked externally or processed per subject/session.
 
 A montage-aware 2D phase grid is supported by
 `validation.analytic_phase.phase_grid_topology_metrics`, but the EEG runner

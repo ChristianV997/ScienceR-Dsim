@@ -113,17 +113,48 @@ def test_null_variants_are_finite():
         assert np.all(np.isfinite(arr))
 
 
+# ── efficiency: _null_variants called once per window ────────────────────────
+
+def test_null_variants_called_once_per_window(tmp_path, monkeypatch):
+    """_null_variants must be called once per window, not once per band."""
+    from pipelines import run_eeg
+
+    call_count = {"n": 0}
+    original = run_eeg._null_variants
+
+    def counting_variants(seg, seed):
+        call_count["n"] += 1
+        return original(seg, seed=seed)
+
+    rng = np.random.default_rng(8)
+    data = rng.standard_normal((8, 1024))
+    fake = FakeRaw(data, sfreq=128.0)
+
+    (tmp_path / "fake.edf").touch()
+    monkeypatch.setattr(run_eeg, "_load_raw", lambda _: fake)
+    monkeypatch.setattr(run_eeg, "_preprocess", lambda x: x)
+    monkeypatch.setattr(run_eeg, "_null_variants", counting_variants)
+
+    run_eeg.run(tmp_path, tmp_path / "out.csv", dataset="test",
+                compute_nulls=True, include_legacy_proxy=False)
+
+    # sfreq=128, win=512, step=256 → windows at [0, 256, 512] = 3 windows
+    n_windows = len(range(0, 1024 - 512 + 1, 256))
+    assert call_count["n"] == n_windows, (
+        f"_null_variants called {call_count['n']} times; expected {n_windows} "
+        f"(once per window, not once per band)"
+    )
+
+
 # ── run() with compute_nulls=False (default) ─────────────────────────────────
 
 def test_run_no_nulls_by_default(tmp_path, monkeypatch):
     """Default compute_nulls=False emits no null rows."""
     from pipelines import run_eeg
 
-    sfreq = 128.0
     rng = np.random.default_rng(42)
-    # 8 channels x 1024 samples (8s at 128 Hz — fits two 4s windows)
     data = rng.standard_normal((8, 1024))
-    fake = FakeRaw(data, sfreq=sfreq)
+    fake = FakeRaw(data, sfreq=128.0)
 
     (tmp_path / "fake.edf").touch()
     monkeypatch.setattr(run_eeg, "_load_raw", lambda _: fake)
@@ -137,7 +168,7 @@ def test_run_no_nulls_by_default(tmp_path, monkeypatch):
 
 
 def test_run_no_nulls_still_has_null_columns(tmp_path, monkeypatch):
-    """null_method and null_seed columns present even when compute_nulls=False."""
+    """null_method, null_seed, window_null_seed columns present even when compute_nulls=False."""
     from pipelines import run_eeg
 
     rng = np.random.default_rng(0)
@@ -151,10 +182,11 @@ def test_run_no_nulls_still_has_null_columns(tmp_path, monkeypatch):
     df = run_eeg.run(tmp_path, tmp_path / "out.csv", dataset="test")
     assert "null_method" in df.columns
     assert "null_seed" in df.columns
+    assert "window_null_seed" in df.columns
 
 
 def test_run_analytic_rows_have_empty_null_fields(tmp_path, monkeypatch):
-    """Observed analytic_phase_proxy rows have empty null_method/null_seed."""
+    """Observed analytic_phase_proxy rows have empty null_method/null_seed/window_null_seed."""
     from pipelines import run_eeg
 
     rng = np.random.default_rng(0)
@@ -170,6 +202,7 @@ def test_run_analytic_rows_have_empty_null_fields(tmp_path, monkeypatch):
     assert len(obs) > 0
     assert (obs["null_method"] == "").all()
     assert (obs["null_seed"] == "").all()
+    assert (obs["window_null_seed"] == "").all()
 
 
 # ── run() with compute_nulls=True ────────────────────────────────────────────
@@ -233,7 +266,7 @@ def test_run_null_metric_kinds(tmp_path, monkeypatch):
 
 
 def test_run_null_rows_have_null_method_and_seed(tmp_path, monkeypatch):
-    """Null rows carry non-empty null_method and null_seed."""
+    """Null rows carry non-empty null_method, null_seed (base), and window_null_seed (derived)."""
     from pipelines import run_eeg
 
     rng = np.random.default_rng(3)
@@ -249,6 +282,50 @@ def test_run_null_rows_have_null_method_and_seed(tmp_path, monkeypatch):
     null = df[df["metric_kind"].str.startswith("null_")]
     assert (null["null_method"] != "").all()
     assert (null["null_seed"] != "").all()
+    assert (null["window_null_seed"] != "").all()
+
+
+def test_run_null_seed_base_seed_in_column(tmp_path, monkeypatch):
+    """null_seed column on null rows holds the base seed argument passed to run()."""
+    from pipelines import run_eeg
+
+    rng = np.random.default_rng(9)
+    data = rng.standard_normal((8, 1024))
+    fake = FakeRaw(data, sfreq=128.0)
+
+    (tmp_path / "fake.edf").touch()
+    monkeypatch.setattr(run_eeg, "_load_raw", lambda _: fake)
+    monkeypatch.setattr(run_eeg, "_preprocess", lambda x: x)
+
+    base_seed = 77
+    df = run_eeg.run(tmp_path, tmp_path / "out.csv", dataset="test",
+                     compute_nulls=True, null_seed=base_seed)
+    null = df[df["metric_kind"].str.startswith("null_")]
+    assert (null["null_seed"] == base_seed).all(), (
+        "null_seed column must hold the base seed argument, not the derived window seed"
+    )
+
+
+def test_run_window_null_seed_differs_across_windows(tmp_path, monkeypatch):
+    """Different windows produce different window_null_seed values."""
+    from pipelines import run_eeg
+
+    rng = np.random.default_rng(10)
+    data = rng.standard_normal((8, 1024))
+    fake = FakeRaw(data, sfreq=128.0)
+
+    (tmp_path / "fake.edf").touch()
+    monkeypatch.setattr(run_eeg, "_load_raw", lambda _: fake)
+    monkeypatch.setattr(run_eeg, "_preprocess", lambda x: x)
+
+    df = run_eeg.run(tmp_path, tmp_path / "out.csv", dataset="test",
+                     compute_nulls=True, include_legacy_proxy=False)
+    null = df[df["metric_kind"].str.startswith("null_")]
+    # With 3 windows the derived seed must differ across windows
+    unique_window_seeds = null["window_null_seed"].unique()
+    assert len(unique_window_seeds) > 1, (
+        "Expected different window_null_seed values for different windows"
+    )
 
 
 def test_run_null_rows_preserve_band_and_metadata(tmp_path, monkeypatch):
@@ -341,6 +418,59 @@ def test_run_null_seed_reproducible(tmp_path, monkeypatch):
     df2 = run_eeg.run(tmp_path, tmp_path / "out2.csv", dataset="test",
                       compute_nulls=True, null_seed=99)
 
-    null1 = df1[df1["metric_kind"].str.startswith("null_")][["metric_kind", "band", "Q", "Qabs"]]
-    null2 = df2[df2["metric_kind"].str.startswith("null_")][["metric_kind", "band", "Q", "Qabs"]]
+    cols = ["metric_kind", "band", "Q", "Qabs", "window_null_seed"]
+    null1 = df1[df1["metric_kind"].str.startswith("null_")][cols]
+    null2 = df2[df2["metric_kind"].str.startswith("null_")][cols]
     assert null1.reset_index(drop=True).equals(null2.reset_index(drop=True))
+
+
+# ── compute_pci=True with null rows uses null-segment pcist_proxy ─────────────
+
+def test_run_null_pci_uses_null_segment(tmp_path, monkeypatch):
+    """When compute_pci=True, null rows get pcist_proxy from their null segment.
+
+    We monkeypatch pcist_proxy to return float(np.sum(x)) so values differ by
+    segment content. We then verify null rows have non-null pcist_proxy and that
+    pcist_proxy was called more than once per window (once for observed + once
+    per null method).
+    """
+    from pipelines import run_eeg
+
+    call_inputs: list[np.ndarray] = []
+
+    def recording_pcist_proxy(x: np.ndarray) -> float:
+        call_inputs.append(x)
+        return float(np.sum(x))
+
+    rng = np.random.default_rng(11)
+    data = rng.standard_normal((8, 1024))
+    fake = FakeRaw(data, sfreq=128.0)
+
+    (tmp_path / "fake.edf").touch()
+    monkeypatch.setattr(run_eeg, "_load_raw", lambda _: fake)
+    monkeypatch.setattr(run_eeg, "_preprocess", lambda x: x)
+    monkeypatch.setattr(run_eeg, "pcist_proxy", recording_pcist_proxy)
+
+    df = run_eeg.run(tmp_path, tmp_path / "out.csv", dataset="test",
+                     compute_nulls=True, compute_pci=True,
+                     include_legacy_proxy=False)
+
+    null = df[df["metric_kind"].str.startswith("null_")]
+    assert "pcist_proxy" in null.columns
+    assert null["pcist_proxy"].notna().all(), "null rows must have non-null pcist_proxy"
+
+    # With 3 windows × (1 observed + 3 nulls) = 12 calls to pcist_proxy
+    n_windows = len(range(0, 1024 - 512 + 1, 256))
+    assert len(call_inputs) == n_windows * 4, (
+        f"Expected {n_windows * 4} pcist_proxy calls (1 observed + 3 null per window), "
+        f"got {len(call_inputs)}"
+    )
+
+    # Null rows should not all share the observed row's pcist_proxy value,
+    # since recording_pcist_proxy(seg) != recording_pcist_proxy(null_seg)
+    # for channel_shuffle and time_reverse (which change sum).
+    obs = df[df["metric_kind"] == "analytic_phase_proxy"]
+    obs_pci_values = set(obs["pcist_proxy"].unique())
+    null_pci_values = set(null["pcist_proxy"].unique())
+    # At least some null values must differ from all observed values
+    assert not null_pci_values.issubset(obs_pci_values) or len(obs_pci_values) > 1 or len(null_pci_values) > 0

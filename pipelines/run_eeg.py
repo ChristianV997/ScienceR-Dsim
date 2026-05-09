@@ -171,7 +171,7 @@ _BASE_COLS: Tuple[str, ...] = (
     "window_id", "start_sample", "stop_sample", "sfreq",
     "band", "metric_kind",
     "Q", "Qabs", "phase_grad", "f_dress", "spectral_ratio",
-    "null_method", "null_seed",
+    "null_method", "null_seed", "window_null_seed",
 )
 
 
@@ -207,6 +207,8 @@ def run(
     ----------
     input_dir, output_csv, dataset : as before.
     compute_pci : if True, attach ``pcist_proxy`` to every row of a window.
+        For null rows, ``pcist_proxy`` is computed from the null-transformed
+        segment, not copied from the observed segment.
     bands : optional override for the analytic-phase band table.
     include_legacy_proxy : if True, also emit one ``temporal_phase_proxy`` row
         per window with ``band="broadband"`` for backward comparison.
@@ -216,7 +218,14 @@ def run(
         row. Default False; existing callers are unaffected.
     null_seed : base seed for deterministic null transforms; combined with
         per-window content via hashlib so each window gets a unique but
-        reproducible seed.
+        reproducible seed. Stored verbatim in the ``null_seed`` column of null
+        rows; the derived per-window seed is stored in ``window_null_seed``.
+
+    Note: ``compute_nulls=True`` increases row count approximately 4× (each
+    ``analytic_phase_proxy`` row gets three matched null rows). This runner
+    accumulates rows in memory before writing CSV; long recordings should be
+    chunked externally or processed per subject/session until streaming export
+    is implemented.
     """
     input_dir = Path(input_dir)
     output_csv = Path(output_csv)
@@ -251,6 +260,19 @@ def run(
             pci_val = pcist_proxy(seg) if compute_pci else None
             w_seed = _stable_window_seed(f, s, s + win, null_seed) if compute_nulls else 0
 
+            # Pre-compute null phases ONCE per window, outside the band loop.
+            # This avoids O(n_bands × 3) recomputations of _null_variants and
+            # analytic_phases_by_band on the same null segments.
+            null_phase_cache: dict[str, dict] = {}
+            null_pci_cache: dict[str, Optional[float]] = {}
+            if compute_nulls:
+                for method, null_seg in _null_variants(seg, seed=w_seed).items():
+                    null_phase_cache[method] = analytic_phases_by_band(
+                        null_seg, sfreq, bands=bands
+                    )
+                    if compute_pci:
+                        null_pci_cache[method] = pcist_proxy(null_seg)
+
             band_phases = analytic_phases_by_band(seg, sfreq, bands=bands)
             for band_name, phase in band_phases.items():
                 metrics = channel_phase_gradient_metrics(phase)
@@ -265,36 +287,34 @@ def run(
                     "spectral_ratio": spectral,
                     "null_method": "",
                     "null_seed": "",
+                    "window_null_seed": "",
                 }
                 if compute_pci:
                     row["pcist_proxy"] = pci_val
                 rows.append(row)
 
-                if compute_nulls:
-                    for method, null_seg in _null_variants(seg, seed=w_seed).items():
-                        null_band_phases = analytic_phases_by_band(
-                            null_seg, sfreq, bands=bands
-                        )
-                        if band_name not in null_band_phases:
-                            continue
-                        null_metrics = channel_phase_gradient_metrics(
-                            null_band_phases[band_name]
-                        )
-                        null_row: dict = {
-                            **tmpl,
-                            "band": band_name,
-                            "metric_kind": f"null_{method}",
-                            "Q": null_metrics["Q"],
-                            "Qabs": null_metrics["Qabs"],
-                            "phase_grad": null_metrics["phase_grad"],
-                            "f_dress": null_metrics["f_dress"],
-                            "spectral_ratio": spectral,
-                            "null_method": method,
-                            "null_seed": w_seed,
-                        }
-                        if compute_pci:
-                            null_row["pcist_proxy"] = pci_val
-                        rows.append(null_row)
+                for method, null_band_phases in null_phase_cache.items():
+                    if band_name not in null_band_phases:
+                        continue
+                    null_metrics = channel_phase_gradient_metrics(
+                        null_band_phases[band_name]
+                    )
+                    null_row: dict = {
+                        **tmpl,
+                        "band": band_name,
+                        "metric_kind": f"null_{method}",
+                        "Q": null_metrics["Q"],
+                        "Qabs": null_metrics["Qabs"],
+                        "phase_grad": null_metrics["phase_grad"],
+                        "f_dress": null_metrics["f_dress"],
+                        "spectral_ratio": spectral,
+                        "null_method": method,
+                        "null_seed": null_seed,       # base seed argument
+                        "window_null_seed": w_seed,   # sha256-derived per-window seed
+                    }
+                    if compute_pci:
+                        null_row["pcist_proxy"] = null_pci_cache.get(method)
+                    rows.append(null_row)
 
             if include_legacy_proxy:
                 legacy = temporal_phase_proxy_metrics(seg)
@@ -309,6 +329,7 @@ def run(
                     "spectral_ratio": spectral,
                     "null_method": "",
                     "null_seed": "",
+                    "window_null_seed": "",
                 }
                 if compute_pci:
                     row["pcist_proxy"] = pci_val
