@@ -19,7 +19,10 @@ Datasets are not embedded. Place them under `data/raw/` using the paths in `data
 ## Quick start
 ```bash
 pip install -r requirements.txt
-python main.py --mode synthetic
+make smoke-core
+make test-core
+make test-awareness
+make test-all
 python main.py --mode qzt --input data/checkpoints
 python main.py --mode eeg --dataset ds002094 --input data/raw/ds002094 --output results/ds002094.csv --compute-pci
 python main.py --mode physics --input /path/to/sample.npy --output results/the_well.csv
