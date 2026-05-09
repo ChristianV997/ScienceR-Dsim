@@ -65,3 +65,11 @@ python paper/generate_figures.py --results-root results --output-dir paper/figur
   - `mqtt` for topic ingestion (requires `paho-mqtt`)
   - `websocket` for socket streams (requires `websocket-client`)
 - External ingestion logs records and metrics into SQLite (`sensor_data`, `metrics`, `runs`) for traceability and reproducibility.
+
+## Montage-aware phase-grid topology
+- Enable with `compute_phase_grid_topology=True` in EEG runner.
+- Uses sensor coordinates/montage geometry and Delaunay triangle winding on sensor space.
+- `analytic_phase_proxy` remains channel-order proxy; `phase_grid_topology` is geometry-aware sensor-space topology.
+- Still exploratory; requires null-control and state-label validation before scientific promotion.
+- Future work: source-space topology and LOC/ROC benchmark.
+
