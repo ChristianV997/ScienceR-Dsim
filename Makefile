@@ -1,4 +1,7 @@
-.PHONY: test-root test-core test-awareness test-all smoke smoke-core eval-awareness check
+.PHONY: validate-governance test-root test-core test-awareness test-all smoke smoke-core eval-awareness check
+
+validate-governance:
+	python -m governance.validate
 
 test-root:
 	python -m pytest tests/ -v --tb=short
@@ -6,7 +9,7 @@ test-root:
 test-core: test-root
 
 test-awareness:
-	cd apps/awareness_studio && python -m pytest tests/ -q
+	cd apps/awareness_studio && python -m pytest tests/ -v --tb=short
 
 test-all: test-core test-awareness
 
@@ -19,5 +22,6 @@ eval-awareness:
 	cd apps/awareness_studio && python -m awareness_studio.eval_runner --no-llm --quiet
 
 check:
-	$(MAKE) test-root
-	$(MAKE) smoke
+	$(MAKE) validate-governance
+	$(MAKE) test-core
+	$(MAKE) smoke-core
