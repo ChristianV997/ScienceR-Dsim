@@ -63,6 +63,8 @@ comparison, and (c) labeled state-change validation (e.g. LOC/ROC).
 Datasets are not embedded. Place them under `data/raw/` using the paths in `data/README.md`.
 
 ## Quick start
+
+### Core quick start
 ```bash
 pip install -r requirements.txt
 make smoke-core
@@ -77,7 +79,26 @@ python main.py --mode external --config config/defaults.yaml --output results/li
 python paper/generate_figures.py --results-root results --output-dir paper/figures
 ```
 
-`--mode qzt` writes `results/qzt.csv`, `results/events.csv`, and `results/worldlines.json`.
+Direct equivalents if `make` is unavailable:
+
+```bash
+python main.py --mode synthetic
+python -m pytest tests/ -v --tb=short
+```
+
+### Awareness Studio setup
+```bash
+cd apps/awareness_studio
+pip install -e '.[dev]'
+python -m pytest tests/ -v --tb=short
+```
+
+### Full-stack contributors
+Install root requirements and Awareness Studio dev extras before running:
+
+```bash
+make test-all
+```
 
 ## Contributor Setup Matrix
 
@@ -97,3 +118,10 @@ For setup details and isolation recommendations, see [docs/contributing.md](docs
   - `mqtt` for topic ingestion (requires `paho-mqtt`)
   - `websocket` for socket streams (requires `websocket-client`)
 - External ingestion logs records and metrics into SQLite (`sensor_data`, `metrics`, `runs`) for traceability and reproducibility.
+
+## Montage-aware phase-grid topology
+- Enable with `compute_phase_grid_topology=True` in EEG runner.
+- Uses sensor coordinates/montage geometry and Delaunay triangle winding on sensor space.
+- `analytic_phase_proxy` remains channel-order proxy; `phase_grid_topology` is geometry-aware sensor-space topology.
+- Still exploratory; requires null-control and state-label validation before scientific promotion.
+- Future work: source-space topology and LOC/ROC benchmark.
