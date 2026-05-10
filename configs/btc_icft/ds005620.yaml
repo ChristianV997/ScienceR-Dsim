@@ -1,0 +1,38 @@
+dataset_id: ds005620
+dataset_name: DS005620 anesthesia-state label contract scaffold
+output_root: outputs/btc_icft/ds005620
+subject_split_required: true
+artifact_report_required: true
+required_tasks:
+  - awake_vs_sedated
+  - responsive_vs_unresponsive
+  - experience_vs_no_experience
+  - loc_roc_transition
+allowed_state_labels:
+  - awake
+  - sedated
+  - loc_candidate
+  - roc_candidate
+  - unknown
+allowed_behavior_labels:
+  - responsive
+  - unresponsive
+  - partial
+  - unknown
+allowed_report_labels:
+  - experience
+  - no_experience
+  - dream
+  - imagery
+  - discontinuity
+  - unknown
+forbidden_shortcuts:
+  - unresponsive_equals_unconscious
+  - sedated_equals_no_experience
+  - behavior_equals_report
+  - state_equals_experience
+notes:
+  - operational labels only
+  - no ontology claims
+  - no liberation/enlightenment claims
+  - no soul/afterlife claims
