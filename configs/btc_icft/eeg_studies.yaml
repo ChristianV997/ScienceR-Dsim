@@ -1,0 +1,21 @@
+pipeline_id: eeg_study_dataset_readiness_v0
+study_ids:
+  - DS005620
+  - DS002094
+  - ds001787
+  - ds003969
+  - ds003816
+  - PhysioNet_GABA
+required_outputs:
+  - study_card.json
+  - file_readability_report.json
+  - reader_capability_report.json
+  - dataset_readiness_report.json
+  - report.md
+guardrails:
+  - no_data_download
+  - no_model_training
+  - no_level_m_feature_extraction
+  - no_level_t_topology
+  - no_level_o_c_q
+  - no_ontology_proof_claims
