@@ -1,22 +1,9 @@
-dataset_id: ds005620
+dataset_scope: local_eeg_signal_blocks
 pipeline_id: eeg_signal_block_probe_v0
 default_out: outputs/btc_icft/ds005620/signal_blocks
 default_sample_rate_hz: 100.0
 default_window_seconds: 10.0
 default_max_windows_per_file: 3
-
-supported_fixture_extensions:
-  - .csv
-  - .tsv
-  - .txt
-
-unsupported_binary_extensions:
-  - .edf
-  - .bdf
-  - .set
-  - .vhdr
-  - .fif
-  - .eeg
 
 required_outputs:
   - signal_block_inventory.json
@@ -26,23 +13,33 @@ required_outputs:
   - omega_event.json
   - report.md
 
+fixture_extensions:
+  - .csv
+  - .txt
+  - .tsv
+
+unsupported_binary_extensions:
+  - .edf
+  - .bdf
+  - .set
+  - .vhdr
+  - .fif
+  - .eeg
+
 guardrails:
   - no_data_download
   - no_model_training
   - no_level_m_feature_extraction
   - no_level_t_topology
-  - no_consciousness_claims
-  - no_soul_claims
+  - no_level_o
+  - no_ontology_claims
+  - no_soul_afterlife_claims
   - no_liberation_claims
-  - no_afterlife_claims
-  - stdlib_only
-
-scientific_status: >
-  Signal blocks are numeric fixture arrays segmented for exploratory analysis.
-  They are NOT validated biomarkers and carry no causal or diagnostic claims.
 
 notes:
-  - Only fixture text formats (.csv, .tsv, .txt) are processed by this pipeline.
+  - Only fixture text formats are processed by this pipeline.
   - Binary EEG formats require the optional_mne adapter (see eeg_readers.yaml).
-  - window_seconds controls the target window length; short tail windows are emitted with status=short_window.
+  - window_seconds controls the target window length.
+  - short_window status is emitted when no full window exists but file has samples.
   - max_windows_per_file=0 disables the per-file limit.
+  - PyYAML is NOT required; tests may inspect this file as plain text.

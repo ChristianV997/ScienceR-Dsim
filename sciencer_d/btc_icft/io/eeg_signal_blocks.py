@@ -33,6 +33,13 @@ _BANNED_PHRASES = [
     "transcendence",
 ]
 
+_SAFE_CLAIM = (
+    "Local EEG-like signal files were parsed into operational signal-window metadata "
+    "for future Level M feature extraction."
+)
+
+_TIME_COLUMN_NAMES = {"time", "t", "timestamp", "seconds", "sec"}
+
 
 def _validate_safe_text(text: str) -> None:
     """Raise ValueError if text contains any banned phrase.
@@ -70,7 +77,7 @@ class EEGSignalWindow:
     """Metadata-only descriptor for a single windowed signal block."""
     file_path: str
     row_id: str
-    window_id: int
+    window_id: str
     window_start_s: float
     window_end_s: float
     sample_start: int
@@ -90,8 +97,8 @@ class EEGSignalProbeResult:
     n_readable_files: int
     n_skipped_files: int
     n_windows: int
-    signal_files: list[EEGSignalFile] = field(default_factory=list)
-    windows: list[EEGSignalWindow] = field(default_factory=list)
+    signal_files: list = field(default_factory=list)
+    windows: list = field(default_factory=list)
     skipped_files: list[dict] = field(default_factory=list)
     reader_alignment_report: dict = field(default_factory=dict)
     safe_claim: str = ""
@@ -110,9 +117,9 @@ def parse_fixture_signal_file(
         # sample_rate: 250.0
         # channel_names: ch1,ch2,...
 
-    Then reads numeric data rows. The first non-comment, non-header row
-    that contains only numbers becomes a data row. A header row with column
-    names is also detected and used for channel_names if not already set.
+    Then reads numeric data rows. A header row with column names is detected
+    and used for channel_names if not already set via comment header.
+    Time columns (time/t/timestamp/seconds/sec) are stripped automatically.
 
     Args:
         path: Path to the fixture file.
@@ -130,11 +137,12 @@ def parse_fixture_signal_file(
 
     if not p.exists():
         result.errors.append(f"File not found: {path}")
+        result.errors.append("missing_file")
         return result
 
     ext = p.suffix.lower()
     if ext not in {".csv", ".tsv", ".txt"}:
-        result.errors.append(f"Unsupported extension for fixture adapter: {ext}")
+        result.errors.append(f"unsupported_or_dependency_missing: extension {ext}")
         return result
 
     try:
@@ -159,7 +167,6 @@ def parse_fixture_signal_file(
     if ext == ".tsv":
         delimiter = "\t"
     elif ext == ".txt":
-        # Probe first non-comment line
         for line in lines:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
@@ -182,20 +189,19 @@ def parse_fixture_signal_file(
         if not stripped:
             continue
 
-        # Parse header comments
         if stripped.startswith("#"):
             content = stripped[1:].strip()
-            if content.startswith("channels:") or content.startswith("channels :"):
+            if content.lower().startswith("channels"):
                 try:
                     n_channels_header = int(content.split(":", 1)[1].strip())
                 except (ValueError, IndexError):
                     warnings.append(f"Line {i+1}: malformed channel count comment")
-            elif content.startswith("sample_rate:") or content.startswith("sample_rate :"):
+            elif content.lower().startswith("sample_rate"):
                 try:
                     sr_header = float(content.split(":", 1)[1].strip())
                 except (ValueError, IndexError):
                     warnings.append(f"Line {i+1}: malformed sample_rate comment")
-            elif content.startswith("channel_names:") or content.startswith("channel_names :"):
+            elif content.lower().startswith("channel_names"):
                 try:
                     names_str = content.split(":", 1)[1].strip()
                     channel_names_header = [n.strip() for n in names_str.split(",")]
@@ -203,7 +209,6 @@ def parse_fixture_signal_file(
                     warnings.append(f"Line {i+1}: malformed channel_names comment")
             continue
 
-        # Try to parse as numeric row
         parts = _split(stripped)
         if not parts:
             continue
@@ -212,41 +217,30 @@ def parse_fixture_signal_file(
             nums = [float(x) for x in parts]
             data_rows.append(nums)
         except ValueError:
-            # Non-numeric: could be a header row with column names
             if detected_header_row is None and all(not _is_numeric(x) for x in parts):
                 detected_header_row = parts
-            # Skip non-numeric, non-header rows silently
 
     # Determine channel names
     channel_names: list[str] = []
+    strip_first_col = False
+
     if channel_names_header:
         channel_names = channel_names_header
     elif detected_header_row:
-        # Filter out a leading time/timestamp column
-        if detected_header_row and detected_header_row[0].lower() in {"time", "t", "timestamp"}:
+        if detected_header_row[0].lower() in _TIME_COLUMN_NAMES:
+            strip_first_col = True
             channel_names = detected_header_row[1:]
         else:
             channel_names = detected_header_row
 
-    # Normalize data rows (strip leading time column if widths match channel count + 1)
+    # Strip leading time column from data rows if detected
+    if strip_first_col and data_rows:
+        data_rows = [row[1:] if len(row) > 1 else row for row in data_rows]
+
+    # Validate rectangular rows
     if data_rows:
         first_row_width = len(data_rows[0])
-
-        # If header names suggest first col is time
-        has_time_col = (
-            detected_header_row
-            and detected_header_row[0].lower() in {"time", "t", "timestamp"}
-            and first_row_width == len(detected_header_row)
-        )
-
-        if has_time_col:
-            data_rows = [row[1:] for row in data_rows]
-            first_row_width = len(data_rows[0]) if data_rows else 0
-
-        # Validate consistent width
-        inconsistent = [
-            j for j, row in enumerate(data_rows) if len(row) != first_row_width
-        ]
+        inconsistent = [j for j, row in enumerate(data_rows) if len(row) != first_row_width]
         if inconsistent:
             warnings.append(
                 f"{len(inconsistent)} rows have inconsistent column count (expected {first_row_width})"
@@ -262,9 +256,8 @@ def parse_fixture_signal_file(
 
     sr_final = sr_header if sr_header is not None else sample_rate_hz
 
-    # Generate channel names if missing
     if n_ch_final and not channel_names:
-        channel_names = [f"ch{j+1}" for j in range(n_ch_final)]
+        channel_names = [f"ch_{j}" for j in range(n_ch_final)]
 
     n_samples = len(data_rows)
     duration_s = n_samples / sr_final if sr_final and n_samples else None
@@ -280,7 +273,7 @@ def parse_fixture_signal_file(
     result.errors = errors
 
     if not result.readable:
-        result.errors.append("No numeric data rows found")
+        result.errors.append("no_numeric_signal_rows")
 
     return result
 
@@ -324,15 +317,14 @@ def segment_signal_file(
         window_samples = 1
 
     n_full_windows = n_total // window_samples
-    has_remainder = (n_total % window_samples) > 0
 
-    # If no full windows but file has samples → emit one short window
+    # Short file: no full windows but has samples → emit one short window
     if n_full_windows == 0 and n_total > 0:
         row_id = f"{stem}__win_0"
         w = EEGSignalWindow(
             file_path=signal_file.path,
             row_id=row_id,
-            window_id=0,
+            window_id="win-000",
             window_start_s=0.0,
             window_end_s=n_total / sr,
             sample_start=0,
@@ -357,10 +349,11 @@ def segment_signal_file(
         start_s = sample_start / sr
         end_s = sample_end / sr
         row_id = f"{stem}__win_{idx}"
+        window_id = f"win-{idx:03d}"
         w = EEGSignalWindow(
             file_path=signal_file.path,
             row_id=row_id,
-            window_id=idx,
+            window_id=window_id,
             window_start_s=start_s,
             window_end_s=end_s,
             sample_start=sample_start,
@@ -369,33 +362,7 @@ def segment_signal_file(
             n_samples=window_samples,
             sample_rate_hz=sr,
             channel_names=ch_names,
-            status="ok",
-        )
-        windows.append(w)
-
-    # Emit a short tail window if remainder exists and under max_windows limit
-    if has_remainder and (max_windows is None or len(windows) < max_windows):
-        idx = n_full_windows
-        sample_start = idx * window_samples
-        sample_end = n_total
-        tail_samples = sample_end - sample_start
-        start_s = sample_start / sr
-        end_s = sample_end / sr
-        row_id = f"{stem}__win_{idx}"
-        w = EEGSignalWindow(
-            file_path=signal_file.path,
-            row_id=row_id,
-            window_id=idx,
-            window_start_s=start_s,
-            window_end_s=end_s,
-            sample_start=sample_start,
-            sample_end=sample_end,
-            n_channels=n_ch,
-            n_samples=tail_samples,
-            sample_rate_hz=sr,
-            channel_names=ch_names,
-            status="short_window",
-            warnings=[f"Tail window shorter than requested ({tail_samples} samples < {window_samples})"],
+            status="full_window",
         )
         windows.append(w)
 
@@ -409,9 +376,6 @@ def probe_signal_paths(
     max_windows_per_file: Optional[int] = 3,
 ) -> EEGSignalProbeResult:
     """Probe a list of file paths for signal block extraction.
-
-    Parses each file with the fixture_text adapter, segments into windows,
-    and assembles an aggregate probe result.
 
     Args:
         paths: List of file paths to probe.
@@ -428,10 +392,20 @@ def probe_signal_paths(
     warnings: list[str] = []
 
     _FIXTURE_EXTENSIONS = {".csv", ".tsv", ".txt"}
+    _BINARY_EXTENSIONS = {".edf", ".bdf", ".set", ".vhdr", ".fif", ".eeg"}
 
     for p in paths:
         path_obj = Path(p)
         ext = path_obj.suffix.lower()
+
+        if ext in _BINARY_EXTENSIONS:
+            skipped.append({
+                "path": str(p),
+                "reason": "unsupported_or_dependency_missing",
+                "extension": ext,
+            })
+            warnings.append(f"Skipped {path_obj.name}: unsupported binary EEG extension {ext!r}")
+            continue
 
         if ext not in _FIXTURE_EXTENSIONS:
             skipped.append({
@@ -441,13 +415,24 @@ def probe_signal_paths(
             warnings.append(f"Skipped {path_obj.name}: unsupported extension {ext!r}")
             continue
 
+        if not path_obj.exists():
+            skipped.append({
+                "path": str(p),
+                "reason": "missing_file",
+            })
+            warnings.append(f"Skipped {path_obj.name}: file not found")
+            continue
+
         sig = parse_fixture_signal_file(str(p), sample_rate_hz=sample_rate_hz)
         signal_files.append(sig)
 
         if not sig.readable:
+            reason = "no_numeric_signal_rows"
+            if sig.errors and any("no_numeric_signal_rows" in e for e in sig.errors):
+                reason = "no_numeric_signal_rows"
             skipped.append({
                 "path": str(p),
-                "reason": "unreadable",
+                "reason": reason,
                 "errors": sig.errors,
             })
             continue
@@ -458,13 +443,9 @@ def probe_signal_paths(
     n_readable = sum(1 for sf in signal_files if sf.readable)
     n_skipped = len(skipped)
 
-    safe_claim = (
-        "Signal blocks are numeric fixture arrays segmented for exploratory analysis. "
-        "They are NOT validated biomarkers and carry no causal or diagnostic claims."
-    )
-    _validate_safe_text(safe_claim)
+    _validate_safe_text(_SAFE_CLAIM)
 
-    reader_alignment = build_reader_alignment_report_from_parts(signal_files, skipped)
+    reader_alignment = _build_reader_alignment_report(signal_files, skipped, paths)
 
     result = EEGSignalProbeResult(
         n_files=len(paths),
@@ -475,11 +456,68 @@ def probe_signal_paths(
         windows=all_windows,
         skipped_files=skipped,
         reader_alignment_report=reader_alignment,
-        safe_claim=safe_claim,
+        safe_claim=_SAFE_CLAIM,
         forbidden_claims=[],
         warnings=warnings,
     )
     return result
+
+
+def _build_reader_alignment_report(
+    signal_files: list[EEGSignalFile],
+    skipped: list[dict],
+    all_paths: list[str],
+) -> dict:
+    """Build reader alignment report.
+
+    Args:
+        signal_files: List of parsed signal files.
+        skipped: List of skipped-file dicts.
+        all_paths: All input paths.
+
+    Returns:
+        Dict with alignment statistics including ready_for_p9_signal_extraction.
+    """
+    adapters_used: dict[str, int] = {}
+    extensions_seen: dict[str, int] = {}
+    readable_fixture_files = 0
+    unsupported_binary_files = 0
+    missing_files = 0
+    no_numeric_signal_rows = 0
+
+    for sf in signal_files:
+        ext = Path(sf.path).suffix.lower()
+        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
+        if sf.adapter:
+            adapters_used[sf.adapter] = adapters_used.get(sf.adapter, 0) + 1
+        if sf.readable:
+            readable_fixture_files += 1
+
+    for item in skipped:
+        ext = Path(item["path"]).suffix.lower()
+        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
+        reason = item.get("reason", "")
+        if reason == "unsupported_or_dependency_missing":
+            unsupported_binary_files += 1
+        elif reason == "missing_file":
+            missing_files += 1
+        elif reason == "no_numeric_signal_rows":
+            no_numeric_signal_rows += 1
+
+    return {
+        "used_reader_inspection": True,
+        "readable_fixture_files": readable_fixture_files,
+        "unsupported_binary_files": unsupported_binary_files,
+        "missing_files": missing_files,
+        "no_numeric_signal_rows": no_numeric_signal_rows,
+        "ready_for_p9_signal_extraction": readable_fixture_files > 0,
+        "note": (
+            "Only fixture text extensions (.csv, .tsv, .txt) are processed. "
+            "Binary EEG formats require the optional_mne adapter."
+        ),
+        "adapters_used": adapters_used,
+        "extensions_seen": extensions_seen,
+    }
 
 
 def build_signal_block_inventory(result: EEGSignalProbeResult) -> dict:
@@ -489,10 +527,22 @@ def build_signal_block_inventory(result: EEGSignalProbeResult) -> dict:
         result: Aggregate probe result.
 
     Returns:
-        Dict with aggregate counts and per-file summaries.
+        Dict with aggregate counts, extensions_seen, adapter_counts, sample_rate_values.
     """
     per_file = []
+    extensions_seen: dict[str, int] = {}
+    adapter_counts: dict[str, int] = {}
+    sample_rate_values: list[float] = []
+
     for sf in result.signal_files:
+        ext = Path(sf.path).suffix.lower()
+        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
+        if sf.adapter:
+            adapter_counts[sf.adapter] = adapter_counts.get(sf.adapter, 0) + 1
+        if sf.sample_rate_hz is not None:
+            if sf.sample_rate_hz not in sample_rate_values:
+                sample_rate_values.append(sf.sample_rate_hz)
+
         per_file.append({
             "path": sf.path,
             "readable": sf.readable,
@@ -506,60 +556,20 @@ def build_signal_block_inventory(result: EEGSignalProbeResult) -> dict:
             "n_errors": len(sf.errors),
         })
 
-    windows_per_file: dict[str, int] = {}
-    for w in result.windows:
-        windows_per_file[w.file_path] = windows_per_file.get(w.file_path, 0) + 1
+    for item in result.skipped_files:
+        ext = Path(item["path"]).suffix.lower()
+        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
 
     return {
         "n_files": result.n_files,
         "n_readable_files": result.n_readable_files,
         "n_skipped_files": result.n_skipped_files,
         "n_windows": result.n_windows,
-        "files": per_file,
-        "windows_per_file": windows_per_file,
-        "safe_claim": result.safe_claim,
-    }
-
-
-def build_reader_alignment_report_from_parts(
-    signal_files: list[EEGSignalFile],
-    skipped: list[dict],
-) -> dict:
-    """Build reader alignment report from parsed signal files and skipped list.
-
-    Args:
-        signal_files: List of parsed signal files.
-        skipped: List of skipped-file dicts.
-
-    Returns:
-        Dict with alignment statistics.
-    """
-    adapters_used: dict[str, int] = {}
-    extensions_seen: dict[str, int] = {}
-    readable_count = 0
-
-    for sf in signal_files:
-        ext = Path(sf.path).suffix.lower()
-        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
-        if sf.adapter:
-            adapters_used[sf.adapter] = adapters_used.get(sf.adapter, 0) + 1
-        if sf.readable:
-            readable_count += 1
-
-    for item in skipped:
-        ext = Path(item["path"]).suffix.lower()
-        extensions_seen[ext] = extensions_seen.get(ext, 0) + 1
-
-    return {
-        "adapters_used": adapters_used,
         "extensions_seen": extensions_seen,
-        "n_readable": readable_count,
-        "n_skipped": len(skipped),
-        "alignment": "fixture_text_only",
-        "notes": [
-            "Only fixture text extensions (.csv, .tsv, .txt) are processed.",
-            "Binary EEG formats (.edf, .bdf, etc.) are not supported in this adapter.",
-        ],
+        "adapter_counts": adapter_counts,
+        "sample_rate_values": sorted(sample_rate_values),
+        "files": per_file,
+        "safe_claim": result.safe_claim,
     }
 
 
@@ -576,14 +586,7 @@ def build_reader_alignment_report(result: EEGSignalProbeResult) -> dict:
 
 
 def _build_omega_event(result: EEGSignalProbeResult) -> dict:
-    """Build a minimal omega event record for the probe run.
-
-    Args:
-        result: Aggregate probe result.
-
-    Returns:
-        Dict with omega event metadata.
-    """
+    """Build a minimal omega event record for the probe run."""
     payload = f"probe:{result.n_files}:{result.n_windows}:{result.safe_claim}"
     event_id = hashlib.sha256(payload.encode()).hexdigest()[:16]
     return {
@@ -599,64 +602,89 @@ def _build_omega_event(result: EEGSignalProbeResult) -> dict:
 
 
 def _build_markdown_report(result: EEGSignalProbeResult) -> str:
-    """Build a Markdown summary report for the probe run.
+    """Build a Markdown summary report for the probe run."""
+    _validate_safe_text(result.safe_claim)
 
-    Args:
-        result: Aggregate probe result.
+    md = "# EEG Signal Block Probe\n\n"
 
-    Returns:
-        Markdown string.
-    """
-    md = "# DS005620 EEG Signal-Block Adapter Inspection\n\n"
-    md += "## Overview\n\n"
-    md += "This is a **signal-block contract inspection**. It does NOT:\n"
-    md += "- extract Level M features\n"
-    md += "- perform Level T topology\n"
-    md += "- train models or compute scientific evidence\n"
-    md += "- make claims about cognition, affect, or physiology\n\n"
+    md += "## Stage\n\n"
+    md += "P8.2 — Signal-block adapter contract. Parses fixture EEG-like files into "
+    md += "operational signal-window metadata. Does NOT extract Level M features or "
+    md += "perform Level T topology.\n\n"
 
-    md += f"**Safe claim:** {result.safe_claim}\n\n"
-
-    md += "## Summary\n\n"
-    md += f"- Total files probed: {result.n_files}\n"
+    md += "## Files Inspected\n\n"
+    md += f"- Total files: {result.n_files}\n"
     md += f"- Readable files: {result.n_readable_files}\n"
-    md += f"- Skipped files: {result.n_skipped_files}\n"
-    md += f"- Total windows: {result.n_windows}\n\n"
+    md += f"- Skipped files: {result.n_skipped_files}\n\n"
 
+    md += "## Signal Files\n\n"
     if result.signal_files:
-        md += "## File Details\n\n"
         for sf in result.signal_files[:20]:
             icon = "✓" if sf.readable else "✗"
-            md += f"- {icon} {Path(sf.path).name}\n"
+            md += f"- {icon} {Path(sf.path).name}"
             if sf.n_channels:
-                md += f"  - Channels: {sf.n_channels}\n"
+                md += f" | {sf.n_channels} ch"
             if sf.sample_rate_hz:
-                md += f"  - Sample rate: {sf.sample_rate_hz} Hz\n"
+                md += f" | {sf.sample_rate_hz} Hz"
             if sf.duration_s is not None:
-                md += f"  - Duration: {sf.duration_s:.2f} s\n"
-            if sf.errors:
-                for e in sf.errors[:3]:
-                    md += f"  - Error: {e}\n"
+                md += f" | {sf.duration_s:.2f} s"
+            md += "\n"
+    else:
+        md += "_No signal files parsed._\n"
+    md += "\n"
 
+    md += "## Windows\n\n"
+    md += f"Total signal block windows: {result.n_windows}\n\n"
     if result.windows:
-        md += "\n## Window Details\n\n"
-        md += "| row_id | start_s | end_s | n_samples | status |\n"
-        md += "|--------|---------|-------|-----------|--------|\n"
+        md += "| row_id | window_id | start_s | end_s | n_samples | status |\n"
+        md += "|--------|-----------|---------|-------|-----------|--------|\n"
         for w in result.windows[:30]:
-            md += f"| {w.row_id} | {w.window_start_s:.2f} | {w.window_end_s:.2f} | {w.n_samples} | {w.status} |\n"
+            md += (
+                f"| {w.row_id} | {w.window_id} | {w.window_start_s:.2f} | "
+                f"{w.window_end_s:.2f} | {w.n_samples} | {w.status} |\n"
+            )
+    md += "\n"
 
+    md += "## Skipped Files\n\n"
     if result.skipped_files:
-        md += "\n## Skipped Files\n\n"
         for item in result.skipped_files[:10]:
             md += f"- {Path(item['path']).name}: {item['reason']}\n"
+    else:
+        md += "_No files skipped._\n"
+    md += "\n"
+
+    md += "## Reader Alignment\n\n"
+    ra = result.reader_alignment_report
+    md += f"- Used reader inspection: {ra.get('used_reader_inspection', False)}\n"
+    md += f"- Readable fixture files: {ra.get('readable_fixture_files', 0)}\n"
+    md += f"- Unsupported binary files: {ra.get('unsupported_binary_files', 0)}\n"
+    md += f"- Missing files: {ra.get('missing_files', 0)}\n"
+    md += f"- No numeric signal rows: {ra.get('no_numeric_signal_rows', 0)}\n"
+    md += f"- Ready for P9 signal extraction: {ra.get('ready_for_p9_signal_extraction', False)}\n\n"
+
+    md += "## Safe Claim\n\n"
+    md += f"{result.safe_claim}\n\n"
+
+    md += "## Forbidden Claims\n\n"
+    if result.forbidden_claims:
+        for claim in result.forbidden_claims:
+            md += f"- {claim}\n"
+    else:
+        md += "_None. No consciousness, soul, liberation, afterlife, or ontology proof claims._\n"
+    md += "\n"
 
     if result.warnings:
-        md += f"\n## Warnings ({len(result.warnings)})\n\n"
+        md += f"## Warnings ({len(result.warnings)})\n\n"
         for warn in result.warnings[:10]:
             md += f"- {warn}\n"
+        md += "\n"
 
-    md += "\n---\n"
-    md += "**Guardrail:** This inspection does not validate cognition, affect, or physiology.\n"
+    md += "## Next Required Step\n\n"
+    md += "Use signal-window metadata for P9 real Level M signal feature extraction.\n\n"
+
+    md += "---\n"
+    md += "**Guardrail:** This signal block probe does not validate cognition, affect, physiology, "
+    md += "or any metaphysical property.\n"
     return md
 
 
@@ -697,17 +725,21 @@ def write_signal_probe_outputs(
     with open(win_file, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
-            "row_id", "file_path", "window_id",
+            "file_path", "row_id", "window_id",
             "window_start_s", "window_end_s",
             "sample_start", "sample_end",
-            "n_channels", "n_samples", "sample_rate_hz", "status",
+            "n_channels", "n_samples", "sample_rate_hz",
+            "channel_names", "status", "warnings",
         ])
         for w in result.windows:
             writer.writerow([
-                w.row_id, w.file_path, w.window_id,
+                w.file_path, w.row_id, w.window_id,
                 w.window_start_s, w.window_end_s,
                 w.sample_start, w.sample_end,
-                w.n_channels, w.n_samples, w.sample_rate_hz, w.status,
+                w.n_channels, w.n_samples, w.sample_rate_hz,
+                "|".join(w.channel_names),
+                w.status,
+                "|".join(w.warnings),
             ])
     outputs["window_inventory"] = str(win_file)
 
