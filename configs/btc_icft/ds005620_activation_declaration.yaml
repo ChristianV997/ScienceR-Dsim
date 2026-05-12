@@ -1,0 +1,82 @@
+dataset_scope: ds005620_activation_declaration
+pipeline_id: ds005620_activation_declaration_v0
+dataset_id: DS005620
+default_activation_packet: outputs/btc_icft/ds005620_contract_activation/activation_proposal.json
+default_out: outputs/btc_icft/ds005620_activation_declaration
+
+required_outputs:
+  - activation_declaration_template.json
+  - activation_declaration_validation.json
+  - activation_contract_preview.json
+  - activation_declaration_errors.json
+  - omega_event.json
+  - report.md
+
+required_declaration_fields:
+  - dataset_id
+  - explicit_label_column
+  - positive_values
+  - negative_values
+  - label_scope
+  - join_keys
+  - metadata_provenance
+  - semantic_justification
+  - no_shortcut_inference_confirmation
+  - reviewer_identity_or_role
+  - review_date
+  - both_classes_present_confirmation
+  - ambiguity_reviewed
+
+required_join_keys:
+  - dataset_id
+  - row_id
+  - source_file
+  - window_id
+  - window_start_s
+  - window_end_s
+  - sample_start
+  - sample_end
+
+valid_label_scopes:
+  - window
+  - file
+  - run
+  - subject
+  - session
+
+activation_gates:
+  real_contract_activation_allowed: false
+  activation_dry_run_allowed: false_until_declaration_valid
+
+guardrails:
+  - no_data_download
+  - no_label_inference
+  - no_target_fabrication
+  - no_automatic_real_contract_activation
+  - no_sedated_to_no_experience
+  - no_unresponsive_to_unconscious
+  - no_filename_derived_labels
+  - no_topology_derived_labels
+  - no_artifact_derived_labels
+  - no_p11_gate_modification
+  - no_legacy_mt_real_change
+  - no_level_o
+  - no_ontology_claims
+  - no_soul_afterlife_claims
+  - no_liberation_claims
+
+no_shortcut_confirmation_required_phrases:
+  - "no sedated-to-no_experience shortcut"
+  - "no unresponsive-to-unconscious shortcut"
+
+min_semantic_justification_chars: 40
+
+notes:
+  - P17.0 validates the declaration; it does not activate any contract.
+  - real_contract_activation_allowed is always false from this pipeline.
+  - activation_contract_preview has status preview_human_reviewed_not_active.
+  - Preview does not modify any P12 source file.
+  - Real activation requires a separate human-reviewed P17.1 PR.
+  - Does not modify P11 promotion gates.
+  - Does not modify legacy DS005620 mt_real semantics.
+  - PyYAML is NOT required; tests may inspect this file as plain text.
