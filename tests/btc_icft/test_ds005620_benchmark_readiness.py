@@ -444,6 +444,21 @@ def test_omega_event_safe_claim_no_banned_phrases(tmp_path):
         assert phrase not in claim, f"Banned phrase in omega safe_claim: {phrase!r}"
 
 
+def test_p12_external_contract_handshake_no_longer_missing(tmp_path):
+    """After P12.1, P18.0 dry-run plan must not emit
+    blocked_p12_external_contract_handshake_missing because
+    align_eeg_labels.py now exposes --external-contract."""
+    from sciencer_d.btc_icft.pipelines.plan_ds005620_real_benchmark import main
+    out = tmp_path / "out"
+    main(["--mock-ready", "--out", str(out)])
+    plan = json.loads((out / "dry_run_command_plan.json").read_text())
+    p12_cmd = next((c for c in plan["commands"] if c["stage"] == "P12"), None)
+    assert p12_cmd is not None
+    assert "blocked_p12_external_contract_handshake_missing" not in p12_cmd.get("blockers", [])
+    blockers_data = json.loads((out / "execution_blockers.json").read_text())
+    assert "blocked_p12_external_contract_handshake_missing" not in blockers_data["blockers"]
+
+
 def test_config_has_required_fields():
     config_path = Path("configs/btc_icft/ds005620_real_benchmark_readiness.yaml")
     assert config_path.is_file(), "Config file missing"

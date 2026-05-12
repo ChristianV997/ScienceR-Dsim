@@ -22,13 +22,21 @@ P18.0 produces a readiness summary and dry-run command plan but does NOT:
 P17.1 produced:
 - `p12_external_contract.json` — reviewed external contract artifact
 
-P19.2 (not yet implemented) will produce:
-- `outputs/btc_icft/eeg_signal_blocks_from_mne/DS005620/signal_block_inventory.json`
-- `outputs/btc_icft/eeg_signal_blocks_from_mne/DS005620/window_inventory.csv`
-- `outputs/btc_icft/eeg_signal_blocks_from_mne/DS005620/window_signal_values.json`
-- `outputs/btc_icft/eeg_signal_blocks_from_mne/DS005620/reader_alignment_report.json`
+P19.2 is implemented and produces, into
+`outputs/btc_icft/eeg_signal_blocks_from_mne/DS005620/`:
+- `signal_block_inventory.json`
+- `window_inventory.csv`
+- `window_signal_values.json`
+- `reader_alignment_report.json`
+- `rejected_windows.json`
+- `omega_event.json`
+- `report.md`
 
 P18.0 cross-checks all of these inputs and plans the P18.1 benchmark run.
+
+P12 now supports `--external-contract` (added in P12.1), so the
+`blocked_p12_external_contract_handshake_missing` blocker no longer fires
+when P12 is invoked with the reviewed external contract artifact.
 
 ---
 
@@ -145,9 +153,9 @@ unless a P12 alignment output was explicitly provided.
 | `contract_status is '...' expected 'active_reviewed_external_contract'` | Contract is preview/blocked; rerun P17.1 with valid declaration |
 | `metadata_file not found: X` | Provide real/local DS005620 events.tsv or equivalent |
 | `canonical_signal_blocks directory not found: X` | Run P19.1 MNE extraction + P19.2 conversion |
-| `window_inventory.csv header missing strict join keys: [...]` | P19.2 canonical conversion not yet implemented |
-| `blocked_missing_p19_2_converter` | P19.2 CLI does not exist yet; implement P19.2 |
-| `blocked_p12_external_contract_handshake_missing` | P12 CLI does not support --external-contract |
+| `window_inventory.csv header missing strict join keys: [...]` | Re-run P19.2 canonical conversion to produce strict join-key columns |
+| `blocked_missing_p19_2_converter` | Compatibility blocker reserved for cases where the P19.2 CLI is absent (P19.2 is implemented and present in this repo) |
+| `blocked_p12_external_contract_handshake_missing` | Compatibility blocker reserved for cases where the P12 CLI lacks `--external-contract` (resolved by P12.1) |
 
 ---
 
@@ -157,10 +165,10 @@ P18.0 generates an ordered command plan but does NOT execute any command:
 
 1. **P17.1** — Materialize reviewed external contract
 2. **P19.1** — MNE signal extraction from local EEG files
-3. **P19.2** — Canonical signal-block conversion (not yet implemented)
+3. **P19.2** — Canonical signal-block conversion
 4. **P9** — Level M signal feature extraction
 5. **P10** — Level T signal topology extraction
-6. **P12** — Label alignment with reviewed external contract
+6. **P12** — Label alignment with reviewed external contract (`--external-contract`)
 7. **P13** — Target injection
 8. **P11** — Target-aware M+T benchmark (future P18.1 scope)
 

@@ -116,6 +116,132 @@ def get_label_contract(dataset_id: str) -> EEGLabelContract:
     return registry[dataset_id]
 
 
+_REQUIRED_EXTERNAL_CONTRACT_FIELDS = (
+    "dataset_id",
+    "contract_status",
+    "explicit_label_column",
+    "positive_values",
+    "negative_values",
+    "join_keys",
+)
+_EXPECTED_EXTERNAL_CONTRACT_STATUS = "active_reviewed_external_contract"
+
+
+def load_external_eeg_label_contract(path: str, dataset_id: str) -> EEGLabelContract:
+    """Load and strictly validate a P17.1 reviewed external contract JSON.
+
+    Converts the reviewed external contract artifact into an EEGLabelContract
+    with status='active' so existing alignment logic runs unchanged.
+
+    Validation:
+      - file exists, JSON readable
+      - dataset_id matches caller's dataset_id
+      - contract_status == 'active_reviewed_external_contract'
+      - explicit_label_column non-empty
+      - positive_values, negative_values are non-empty lists with no overlap
+      - join_keys contains all strict keys
+
+    Raises FileNotFoundError or ValueError on any validation failure.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(
+            f"External reviewed contract not found: {path}. "
+            "Run P17.1 (materialize_ds005620_reviewed_contract) first."
+        )
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"External reviewed contract is not valid JSON: {exc}")
+
+    missing = [f for f in _REQUIRED_EXTERNAL_CONTRACT_FIELDS if f not in data]
+    if missing:
+        raise ValueError(
+            f"External reviewed contract missing required fields: {missing}"
+        )
+
+    if data["dataset_id"] != dataset_id:
+        raise ValueError(
+            f"External reviewed contract dataset_id is {data['dataset_id']!r}, "
+            f"expected {dataset_id!r}"
+        )
+
+    if data["contract_status"] != _EXPECTED_EXTERNAL_CONTRACT_STATUS:
+        raise ValueError(
+            f"External reviewed contract contract_status is "
+            f"{data['contract_status']!r}, expected "
+            f"{_EXPECTED_EXTERNAL_CONTRACT_STATUS!r}"
+        )
+
+    label_column = data["explicit_label_column"]
+    if not isinstance(label_column, str) or not label_column.strip():
+        raise ValueError(
+            "External reviewed contract explicit_label_column must be a non-empty string"
+        )
+
+    positive = data["positive_values"]
+    if not isinstance(positive, list) or len(positive) == 0:
+        raise ValueError(
+            "External reviewed contract positive_values must be a non-empty list"
+        )
+    negative = data["negative_values"]
+    if not isinstance(negative, list) or len(negative) == 0:
+        raise ValueError(
+            "External reviewed contract negative_values must be a non-empty list"
+        )
+
+    overlap = sorted(set(map(str, positive)) & set(map(str, negative)))
+    if overlap:
+        raise ValueError(
+            f"External reviewed contract positive_values and negative_values "
+            f"overlap: {overlap}"
+        )
+
+    contract_keys = data["join_keys"]
+    if not isinstance(contract_keys, list):
+        raise ValueError("External reviewed contract join_keys must be a list")
+    missing_keys = [k for k in _REQUIRED_SIGNAL_COLS if k not in contract_keys]
+    if missing_keys:
+        raise ValueError(
+            f"External reviewed contract join_keys missing strict keys: {missing_keys}"
+        )
+
+    label_scope = data.get("label_scope", "window")
+    if label_scope not in _ALLOWED_SCOPES:
+        raise ValueError(
+            f"External reviewed contract label_scope {label_scope!r} not supported"
+        )
+
+    return EEGLabelContract(
+        dataset_id=dataset_id,
+        title=f"EEG explicit label contract from external reviewed P17.1 artifact for {dataset_id}",
+        source_hint="external_reviewed_contract",
+        status="active",
+        label_scope=label_scope,
+        explicit_label_column=label_column,
+        positive_values=[str(v) for v in positive],
+        negative_values=[str(v) for v in negative],
+        join_keys=list(contract_keys),
+        allowed_metadata_extensions=[".csv", ".tsv", ".json"],
+        caveats=[
+            "Contract sourced from external reviewed P17.1 artifact; "
+            "no labels inferred and no targets fabricated.",
+        ],
+        guardrails=list(data.get("guardrails") or [
+            "no_label_inference",
+            "no_target_fabrication",
+            "no_filename_derived_labels",
+            "no_topology_derived_labels",
+            "no_artifact_derived_labels",
+            "no_sedated_to_no_experience",
+            "no_unresponsive_to_unconscious",
+            "no_ontology_claims",
+            "no_soul_afterlife_claims",
+            "no_liberation_claims",
+        ]),
+    )
+
+
 def load_metadata_rows(path: str) -> list[dict]:
     p = Path(path)
     if not p.exists():

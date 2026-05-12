@@ -1,4 +1,5 @@
 from __future__ import annotations
+import csv
 import json
 import subprocess
 import sys
@@ -85,3 +86,221 @@ def test_cli_modes_and_config(tmp_path:Path):
     assert r3.returncode!=0 and "Explicit local metadata is required" in r3.stdout
     cfg=Path("configs/btc_icft/eeg_label_contracts.yaml").read_text()
     assert "required_outputs" in cfg and "required_statuses" in cfg and "guardrails" in cfg
+
+
+# ---------------------------------------------------------------------------
+# P12.1 — external reviewed contract support
+# ---------------------------------------------------------------------------
+
+_STRICT_JOIN_KEYS = [
+    "dataset_id", "row_id", "source_file", "window_id",
+    "window_start_s", "window_end_s", "sample_start", "sample_end",
+]
+
+
+def _valid_external_contract(dataset_id: str = "DS005620") -> dict:
+    return {
+        "dataset_id": dataset_id,
+        "contract_status": "active_reviewed_external_contract",
+        "explicit_label_column": "trial_type",
+        "positive_values": ["focus"],
+        "negative_values": ["mind_wandering"],
+        "label_scope": "window",
+        "join_keys": _STRICT_JOIN_KEYS[:],
+        "metadata_provenance": "data/DS005620/events.tsv",
+        "activation_provenance": "p17_1_reviewed_materializer",
+        "guardrails": ["no_label_inference"],
+    }
+
+
+def _write_signal_csv(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cols = _STRICT_JOIN_KEYS[:]
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for i in range(2):
+            w.writerow({
+                "dataset_id": "DS005620",
+                "row_id": f"r{i}",
+                "source_file": "f.edf",
+                "window_id": f"w{i}",
+                "window_start_s": str(i),
+                "window_end_s": str(i + 1),
+                "sample_start": str(i * 10),
+                "sample_end": str((i + 1) * 10),
+            })
+
+
+def _write_metadata_csv(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cols = _STRICT_JOIN_KEYS + ["trial_type"]
+    rows = [
+        {
+            "dataset_id": "DS005620",
+            "row_id": "r0",
+            "source_file": "f.edf",
+            "window_id": "w0",
+            "window_start_s": "0",
+            "window_end_s": "1",
+            "sample_start": "0",
+            "sample_end": "10",
+            "trial_type": "focus",
+        },
+        {
+            "dataset_id": "DS005620",
+            "row_id": "r1",
+            "source_file": "f.edf",
+            "window_id": "w1",
+            "window_start_s": "1",
+            "window_end_s": "2",
+            "sample_start": "10",
+            "sample_end": "20",
+            "trial_type": "mind_wandering",
+        },
+    ]
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def test_external_contract_valid_aligns_labels(tmp_path: Path):
+    contract_path = tmp_path / "p12_external_contract.json"
+    contract_path.write_text(json.dumps(_valid_external_contract()), encoding="utf-8")
+    sig_path = tmp_path / "features_m_signal.csv"
+    meta_path = tmp_path / "metadata.csv"
+    _write_signal_csv(sig_path)
+    _write_metadata_csv(meta_path)
+
+    out_dir = tmp_path / "out"
+    r = subprocess.run(
+        [
+            sys.executable, "-m", "sciencer_d.btc_icft.pipelines.align_eeg_labels",
+            "--dataset-id", "DS005620",
+            "--signal-features", str(sig_path),
+            "--metadata", str(meta_path),
+            "--external-contract", str(contract_path),
+            "--out", str(out_dir),
+        ],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stderr
+
+    aligned = (out_dir / "label_alignment.csv").read_text().strip().splitlines()
+    header = aligned[0].split(",")
+    rows = [dict(zip(header, line.split(","))) for line in aligned[1:]]
+    aligned_rows = [r for r in rows if r["alignment_status"] == "aligned"]
+    assert len(aligned_rows) == 2
+    ys = sorted({r["y"] for r in aligned_rows})
+    # y values should only be from explicit positive/negative mapping
+    assert ys == ["0", "1"]
+
+
+def test_external_contract_rejects_wrong_dataset_id(tmp_path: Path):
+    bad = _valid_external_contract(dataset_id="DSXXX")
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="dataset_id"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_missing_or_wrong_status(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["contract_status"] = "preview_human_reviewed_not_active"
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="contract_status"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_missing_explicit_label_column(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["explicit_label_column"] = ""
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="explicit_label_column"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_empty_positive_values(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["positive_values"] = []
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="positive_values"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_empty_negative_values(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["negative_values"] = []
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="negative_values"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_overlapping_positive_negative_values(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["positive_values"] = ["focus", "shared"]
+    bad["negative_values"] = ["mind_wandering", "shared"]
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="overlap"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_external_contract_rejects_missing_strict_join_keys(tmp_path: Path):
+    bad = _valid_external_contract()
+    bad["join_keys"] = ["dataset_id", "row_id"]
+    p = tmp_path / "bad.json"
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="strict keys"):
+        load_external_eeg_label_contract(str(p), "DS005620")
+
+
+def test_existing_mock_fixture_still_passes(tmp_path: Path):
+    out = tmp_path / "inactive"
+    r = subprocess.run(
+        [sys.executable, "-m", "sciencer_d.btc_icft.pipelines.align_eeg_labels",
+         "--dataset-id", "DS005620", "--out", str(out), "--mock-fixture"],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0
+    rep = json.loads((out / "label_alignment_report.json").read_text())
+    assert rep["explicit_targets_available"] is False
+
+
+def test_existing_activate_mock_contract_still_passes(tmp_path: Path):
+    out = tmp_path / "active"
+    r = subprocess.run(
+        [sys.executable, "-m", "sciencer_d.btc_icft.pipelines.align_eeg_labels",
+         "--dataset-id", "DS005620", "--out", str(out),
+         "--mock-fixture", "--activate-mock-contract"],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0
+    rep = json.loads((out / "label_alignment_report.json").read_text())
+    assert rep["explicit_targets_available"] is True
+
+
+def test_external_contract_missing_file_returns_nonzero(tmp_path: Path):
+    sig_path = tmp_path / "features_m_signal.csv"
+    meta_path = tmp_path / "metadata.csv"
+    _write_signal_csv(sig_path)
+    _write_metadata_csv(meta_path)
+
+    r = subprocess.run(
+        [
+            sys.executable, "-m", "sciencer_d.btc_icft.pipelines.align_eeg_labels",
+            "--dataset-id", "DS005620",
+            "--signal-features", str(sig_path),
+            "--metadata", str(meta_path),
+            "--external-contract", str(tmp_path / "missing.json"),
+            "--out", str(tmp_path / "out"),
+        ],
+        capture_output=True, text=True,
+    )
+    assert r.returncode != 0
+    assert "External reviewed contract" in r.stderr
