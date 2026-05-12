@@ -1,0 +1,90 @@
+dataset_scope: ds005620_contract_activation_audit
+pipeline_id: ds005620_contract_activation_v0
+dataset_id: DS005620
+default_ds_root: outputs/btc_icft/ds005620
+default_out: outputs/btc_icft/ds005620_contract_activation
+
+required_outputs:
+  - activation_proposal.json
+  - human_review_packet.json
+  - metadata_value_audit.csv
+  - activation_blockers.json
+  - omega_event.json
+  - report.md
+
+activation_gates:
+  - metadata_file_exists
+  - explicit_label_column_declared
+  - positive_values_declared
+  - negative_values_declared
+  - label_scope_declared
+  - join_keys_declared
+  - both_classes_present
+  - ambiguous_values_rejected
+  - human_review_required
+  - contract_activation_allowed
+
+contract_activation_allowed: false
+
+guardrails:
+  - no_label_inference
+  - no_target_fabrication
+  - no_sedated_to_no_experience
+  - no_unresponsive_to_unconscious
+  - no_filename_derived_labels
+  - no_topology_derived_labels
+  - no_artifact_derived_labels
+  - no_automatic_real_contract_activation
+  - no_p11_gate_modification
+  - no_legacy_mt_real_change
+  - no_data_download
+  - no_consciousness_claims
+  - no_soul_afterlife_claims
+  - no_liberation_claims
+  - no_ontology_proof_claims
+  - no_q_equals_self
+  - no_q_equals_soul
+
+required_contract_fields_for_real_activation:
+  - explicit_label_column
+  - positive_values
+  - negative_values
+  - label_scope
+  - join_keys
+  - metadata_provenance
+  - reason_mapping_is_valid
+  - reason_no_shortcut_inference
+
+candidate_metadata_filenames:
+  - events.tsv
+  - events.csv
+  - "*_events.tsv"
+  - "*_events.csv"
+  - participants.tsv
+  - participants.csv
+
+known_label_columns:
+  - trial_type
+  - condition
+  - state
+  - label
+  - task
+
+known_ambiguous_values:
+  - n/a
+  - na
+  - nan
+  - none
+  - unknown
+  - undefined
+  - ""
+  - "?"
+  - other
+
+notes:
+  - Read-only audit; no labels inferred, no targets fabricated, no data downloaded.
+  - Real contract activation requires a separate human-reviewed PR.
+  - contract_activation_allowed is always false in this pipeline.
+  - Does not modify P11 promotion gates.
+  - Does not modify legacy DS005620 mt_real semantics.
+  - PyYAML is NOT required; tests may inspect this file as plain text.
