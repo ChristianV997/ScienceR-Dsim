@@ -12,6 +12,9 @@ from sciencer_d.btc_icft.labels.eeg_label_contracts import (
 
 _STRICT_JOIN_KEYS = _REQUIRED_SIGNAL_COLS
 _EXTERNAL_CONTRACT_REQUIRED_STATUS = "active_reviewed_external_contract"
+_DEFAULT_METADATA_EXTENSIONS = [".csv", ".tsv", ".json"]
+_DEFAULT_CAVEATS = ["External reviewed contract; labels from explicit metadata only."]
+_DEFAULT_GUARDRAILS = ["no_label_inference", "no_target_fabrication", "no_ontology_claims"]
 
 
 def _write_mock_signal(path: Path, dataset_id: str) -> None:
@@ -104,9 +107,9 @@ def load_external_contract(path: str, dataset_id: str) -> EEGLabelContract:
         positive_values=list(positive_values),
         negative_values=list(negative_values),
         join_keys=_STRICT_JOIN_KEYS[:],
-        allowed_metadata_extensions=data.get("allowed_metadata_extensions", [".csv", ".tsv", ".json"]),
-        caveats=data.get("caveats", ["External reviewed contract; labels from explicit metadata only."]),
-        guardrails=data.get("guardrails", ["no_label_inference", "no_target_fabrication", "no_ontology_claims"]),
+        allowed_metadata_extensions=list(data.get("allowed_metadata_extensions") or _DEFAULT_METADATA_EXTENSIONS),
+        caveats=list(data.get("caveats") or _DEFAULT_CAVEATS),
+        guardrails=list(data.get("guardrails") or _DEFAULT_GUARDRAILS),
     )
 
 

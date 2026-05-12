@@ -249,7 +249,7 @@ def test_external_contract_cli_wrong_dataset_id_fails(tmp_path: Path):
         w = csv.DictWriter(f, fieldnames=list(_signal_row_ext())); w.writeheader(); w.writerow(_signal_row_ext())
     meta = tmp_path / "meta.csv"
     with meta.open("w", newline="", encoding="utf-8") as f:
-        row = _meta_row_ext(); w2 = csv.DictWriter(f, fieldnames=list(row)); w2.writeheader(); w2.writerow(row)
+        row = _meta_row_ext(); w = csv.DictWriter(f, fieldnames=list(row)); w.writeheader(); w.writerow(row)
     out = tmp_path / "out"
     r = subprocess.run(
         [sys.executable, "-m", "sciencer_d.btc_icft.pipelines.align_eeg_labels",
