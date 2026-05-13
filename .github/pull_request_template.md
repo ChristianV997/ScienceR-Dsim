@@ -3,7 +3,7 @@
 ## Phase / Scope
 
 Checklist:
-- [ ] P17 reviewed-contract / label declaration
+- [ ] P17 reviewed-contract / label declaration (contract review + declaration scope)
 - [ ] P18 readiness / executor / autonomy
 - [ ] P19 MNE extraction / signal blocks
 - [ ] P9 Level M
@@ -58,7 +58,7 @@ Checklist:
 
 ## Tests Not Run
 
-Explain exactly why.
+Explain exactly why (for example: requires local dataset access, blocked by dependency, or not applicable).
 
 ## Artifacts Produced
 

@@ -1,4 +1,4 @@
-# Default owner routing for repository changes.
+# Catch-all owner rule for all repository paths.
 * @ChristianV997
 
 # DS005620-sensitive benchmark and execution paths require owner review.

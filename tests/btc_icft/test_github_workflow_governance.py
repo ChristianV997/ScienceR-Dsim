@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-ROOT = Path(".")
+ROOT = Path(__file__).resolve().parents[2]
 PR_TEMPLATE = ROOT / ".github" / "pull_request_template.md"
 ISSUE_TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 PIPELINE_ISSUE = ISSUE_TEMPLATE_DIR / "ds005620_pipeline_task.yml"
@@ -18,6 +18,9 @@ TEMPLATE_FILES = [
     RUNTIME_BUG_ISSUE,
     EVIDENCE_CLAIM_ISSUE,
     AGENT_HANDOFF_ISSUE,
+    DOC_AGENT_WORKFLOW,
+    DOC_REVIEW_GOVERNANCE,
+    DOC_AGENT_CHECKLISTS,
 ]
 
 BANNED_PHRASES = [
@@ -89,8 +92,16 @@ def test_agent_pr_checklists_doc_exists():
 def test_no_template_contains_banned_phrase_substrings():
     for file_path in TEMPLATE_FILES:
         txt = file_path.read_text(encoding="utf-8").lower()
+        normalized_txt = " ".join(
+            txt.replace("-", " ").replace("_", " ").replace("/", " ").split()
+        )
         for phrase in BANNED_PHRASES:
-            assert phrase not in txt, f"{file_path} contains banned phrase: {phrase}"
+            normalized_phrase = " ".join(
+                phrase.replace("-", " ").replace("_", " ").replace("/", " ").split()
+            )
+            assert normalized_phrase not in normalized_txt, (
+                f"{file_path} contains banned phrase: {phrase}"
+            )
 
 
 def test_pr_template_mentions_mock_e2e_and_real_local_distinction():
