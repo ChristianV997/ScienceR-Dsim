@@ -42,6 +42,12 @@ BANNED_PHRASES = [
 ]
 
 
+def _normalize_text(text: str) -> str:
+    return " ".join(
+        text.lower().replace("-", " ").replace("_", " ").replace("/", " ").split()
+    )
+
+
 def test_pr_template_exists():
     assert PR_TEMPLATE.is_file()
 
@@ -91,14 +97,9 @@ def test_agent_pr_checklists_doc_exists():
 
 def test_no_template_contains_banned_phrase_substrings():
     for file_path in TEMPLATE_FILES:
-        txt = file_path.read_text(encoding="utf-8").lower()
-        normalized_txt = " ".join(
-            txt.replace("-", " ").replace("_", " ").replace("/", " ").split()
-        )
+        normalized_txt = _normalize_text(file_path.read_text(encoding="utf-8"))
         for phrase in BANNED_PHRASES:
-            normalized_phrase = " ".join(
-                phrase.replace("-", " ").replace("_", " ").replace("/", " ").split()
-            )
+            normalized_phrase = _normalize_text(phrase)
             assert normalized_phrase not in normalized_txt, (
                 f"{file_path} contains banned phrase: {phrase}"
             )

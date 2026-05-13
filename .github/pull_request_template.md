@@ -3,7 +3,7 @@
 ## Phase / Scope
 
 Checklist:
-- [ ] P17 reviewed-contract / label declaration (contract review + declaration scope)
+- [ ] P17 contract review and label declaration
 - [ ] P18 readiness / executor / autonomy
 - [ ] P19 MNE extraction / signal blocks
 - [ ] P9 Level M

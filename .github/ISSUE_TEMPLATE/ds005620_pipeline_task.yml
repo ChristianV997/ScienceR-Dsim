@@ -50,7 +50,7 @@ body:
     id: validation_commands
     attributes:
       label: validation commands
-      description: Paste exact commands that prove completion.
+      description: Paste exact commands that prove completion (`github-governance-check` validates governance templates/docs tests).
       value: |
         python -m governance.validate
         make github-governance-check
