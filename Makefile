@@ -1,4 +1,4 @@
-.PHONY: validate-governance test-root test-core test-awareness test-all smoke smoke-core eval-awareness check ds005620-e2e-dry-run ds005620-e2e-mock validate-ds005620-e2e validate-ds005620-e2e-json validate-ds005620-contracts ds005620-e2e-ci
+.PHONY: validate-governance test-root test-core test-awareness test-all smoke smoke-core eval-awareness check ds005620-e2e-dry-run ds005620-e2e-mock validate-ds005620-e2e validate-ds005620-e2e-json validate-ds005620-contracts ds005620-e2e-ci github-governance-check
 
 validate-governance:
 	python -m governance.validate
@@ -61,3 +61,6 @@ ds005620-e2e-ci:
 	$(MAKE) validate-ds005620-e2e
 	$(MAKE) validate-ds005620-e2e-json
 	$(MAKE) validate-ds005620-contracts
+
+github-governance-check:
+	python -m pytest tests/btc_icft/test_github_workflow_governance.py -q
