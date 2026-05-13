@@ -48,6 +48,9 @@ def _normalize_text(text: str) -> str:
     )
 
 
+NORMALIZED_BANNED_PHRASES = [_normalize_text(phrase) for phrase in BANNED_PHRASES]
+
+
 def test_pr_template_exists():
     assert PR_TEMPLATE.is_file()
 
@@ -98,8 +101,7 @@ def test_agent_pr_checklists_doc_exists():
 def test_no_template_contains_banned_phrase_substrings():
     for file_path in TEMPLATE_FILES:
         normalized_txt = _normalize_text(file_path.read_text(encoding="utf-8"))
-        for phrase in BANNED_PHRASES:
-            normalized_phrase = _normalize_text(phrase)
+        for normalized_phrase, phrase in zip(NORMALIZED_BANNED_PHRASES, BANNED_PHRASES):
             assert normalized_phrase not in normalized_txt, (
                 f"{file_path} contains banned phrase: {phrase}"
             )

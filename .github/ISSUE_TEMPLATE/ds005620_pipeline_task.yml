@@ -53,6 +53,7 @@ body:
       description: Paste exact commands that prove completion (`github-governance-check` validates governance templates/docs tests).
       value: |
         python -m governance.validate
+        # validates governance templates/docs checks
         make github-governance-check
         python -m pytest tests/btc_icft -q
     validations:
