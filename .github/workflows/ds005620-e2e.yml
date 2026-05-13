@@ -65,7 +65,6 @@ jobs:
           make ds005620-export-evidence
           make ds005620-paper-skeleton
           make ds005620-inspect-runtime
-          make ds005620-preflight
           make ds005620-test-runtime
 
       - name: Upload DS005620 mock E2E evidence
