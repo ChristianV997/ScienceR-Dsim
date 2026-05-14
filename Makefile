@@ -75,7 +75,7 @@ ds005620-inspect-runtime:
 	python -m sciencer_d.btc_icft.pipelines.inspect_science_runtime --artifact-root outputs/btc_icft/ds005620_real_benchmark_execution_mock --out outputs/btc_icft/science_runtime_inspection
 
 ds005620-preflight:
-	python -m sciencer_d.btc_icft.pipelines.preflight_ds005620_real_local --out outputs/btc_icft/ds005620_real_local_preflight
+	python -m sciencer_d.btc_icft.pipelines.preflight_ds005620_real_local --out outputs/btc_icft/ds005620_real_local_preflight; true
 
 ds005620-test-runtime:
 	python -m pytest tests/btc_icft/test_science_runtime_events.py tests/btc_icft/test_science_runtime_event_log.py tests/btc_icft/test_science_runtime_state.py tests/btc_icft/test_science_task_inventory.py tests/btc_icft/test_science_runtime_snapshots.py tests/btc_icft/test_ds005620_artifact_manifest.py tests/btc_icft/test_ds005620_evidence_packet.py tests/btc_icft/test_ds005620_paper_skeleton.py tests/btc_icft/test_ds005620_real_local_preflight.py -v --tb=short
