@@ -171,14 +171,16 @@ UNSAFE_PHRASES = [
     "consciousness proven",
 ]
 
-# Section headings that permit unsafe phrases as *examples of what is forbidden*
+# Section headings that permit unsafe phrases as *examples of what is forbidden*.
+# The dots in must.not / do.not.use intentionally match any whitespace variant
+# (e.g. "must not", "must-not"), not just literal periods.
 GUARDRAIL_HEADING_RE = re.compile(
     r"(guardrail|forbidden|unsafe|must.not|do.not.use)",
     re.IGNORECASE,
 )
 
 
-def _find_active_section_heading(lines: list[str], line_idx: int) -> str:
+def _find_preceding_section_heading(lines: list[str], line_idx: int) -> str:
     """Walk backwards from line_idx to find the most recent heading line."""
     for i in range(line_idx - 1, -1, -1):
         stripped = lines[i].strip()
@@ -195,7 +197,7 @@ def _check_doc_for_unsafe_phrases(path: Path) -> list[str]:
         lower_line = line.lower()
         for phrase in UNSAFE_PHRASES:
             if phrase in lower_line:
-                heading = _find_active_section_heading(lines, idx)
+                heading = _find_preceding_section_heading(lines, idx)
                 if GUARDRAIL_HEADING_RE.search(heading):
                     # Allowed: it's an example under a guardrail section
                     continue
