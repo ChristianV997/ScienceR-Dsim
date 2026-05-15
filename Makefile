@@ -72,10 +72,10 @@ ds005620-build-manifest:
 	python tools/build_ds005620_artifact_manifest.py --root outputs/btc_icft/ds005620_real_benchmark_execution_mock --out outputs/btc_icft/ds005620_real_benchmark_execution_mock
 
 ds005620-export-evidence:
-	python tools/export_ds005620_evidence_packet.py --manifest outputs/btc_icft/ds005620_real_benchmark_execution_mock/artifact_manifest.json --out outputs/btc_icft/ds005620_real_benchmark_execution_mock
+	python tools/export_ds005620_evidence_packet.py --manifest outputs/btc_icft/ds005620_real_benchmark_execution_mock/artifact_manifest.json --out outputs/btc_icft/ds005620_real_benchmark_execution_mock --ontology-root outputs/btc_icft/ds005620_ontology_evaluation_mock
 
 ds005620-paper-skeleton:
-	python tools/generate_ds005620_paper_skeleton.py --evidence outputs/btc_icft/ds005620_real_benchmark_execution_mock/evidence_packet.json --out outputs/btc_icft/ds005620_real_benchmark_execution_mock
+	python tools/generate_ds005620_paper_skeleton.py --evidence outputs/btc_icft/ds005620_real_benchmark_execution_mock/evidence_packet.json --out outputs/btc_icft/ds005620_real_benchmark_execution_mock --ontology-root outputs/btc_icft/ds005620_ontology_evaluation_mock
 
 ds005620-inspect-runtime:
 	python -m sciencer_d.btc_icft.pipelines.inspect_science_runtime --artifact-root outputs/btc_icft/ds005620_real_benchmark_execution_mock --out outputs/btc_icft/science_runtime_inspection
@@ -93,19 +93,21 @@ ds005620-autonomy-check:
 	$(MAKE) validate-ds005620-contracts
 	$(MAKE) ds005620-ci-evidence-report
 	$(MAKE) ds005620-build-manifest
+	$(MAKE) ds005620-ontology-eval-mock
 	$(MAKE) ds005620-export-evidence
 	$(MAKE) ds005620-paper-skeleton
 	$(MAKE) ds005620-inspect-runtime
 	$(MAKE) ds005620-test-runtime
-	$(MAKE) ds005620-ontology-eval-mock
 
 ds005620-ontology-eval-mock:
 	python -m sciencer_d.btc_icft.pipelines.evaluate_ds005620_ontology_claims --execution-root outputs/btc_icft/ds005620_real_benchmark_execution_mock --out outputs/btc_icft/ds005620_ontology_evaluation_mock
 
 ds005620-ontology-check:
 	$(MAKE) ds005620-e2e-mock
-	$(MAKE) ds005620-export-evidence
+	$(MAKE) ds005620-build-manifest
 	$(MAKE) ds005620-ontology-eval-mock
+	$(MAKE) ds005620-export-evidence
+	$(MAKE) ds005620-paper-skeleton
 
 ds005620-test-ontology:
 	python -m pytest tests/btc_icft/test_ontology_schema.py tests/btc_icft/test_ontology_safe_language.py tests/btc_icft/test_ontology_bridge_registry.py tests/btc_icft/test_ontology_evidence_matrix.py tests/btc_icft/test_ds005620_ontology_evaluator.py -v --tb=short
