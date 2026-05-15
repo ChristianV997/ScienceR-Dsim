@@ -100,3 +100,6 @@ ds005620-autonomy-check:
 
 github-governance-check:
 	python -m pytest tests/btc_icft/test_github_workflow_governance.py -q
+
+ontology-language-check:
+	python tools/validate_ontology_claim_language.py --root . --output-roots outputs/btc_icft --json-out outputs/btc_icft/ontology_claim_language_validation.json --markdown-out outputs/btc_icft/ontology_claim_language_validation.md
