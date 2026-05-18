@@ -259,3 +259,26 @@ tol-synthesis-cycle:
 	$(MAKE) tol-sync-obsidian
 	$(MAKE) ontology-language-check
 	$(MAKE) ds005620-generated-language-check
+
+
+laptop-setup-plan:
+	python -m tools.local_setup.setup_plan --out outputs/local_setup/setup_plan.json --markdown-out outputs/local_setup/setup_plan.md
+
+laptop-setup-doctor:
+	python -m tools.local_setup.env_probe --out outputs/local_setup/environment_report.json --markdown-out outputs/local_setup/environment_report.md
+
+laptop-smoke:
+	python -m tools.local_setup.smoke_runner --mode run --out outputs/local_setup/smoke_results.json --markdown-out outputs/local_setup/smoke_results.md
+
+laptop-smoke-dry-run:
+	python -m tools.local_setup.smoke_runner --mode dry-run --out outputs/local_setup/smoke_results.json --markdown-out outputs/local_setup/smoke_results.md
+
+laptop-troubleshoot-report:
+	python -m tools.local_setup.troubleshoot --env outputs/local_setup/environment_report.json --smoke outputs/local_setup/smoke_results.json --markdown-out outputs/local_setup/troubleshoot_report.md
+
+laptop-safe-run:
+	$(MAKE) laptop-setup-doctor
+	$(MAKE) laptop-smoke-dry-run
+	$(MAKE) local-agent-healthcheck
+	$(MAKE) local-ops-healthcheck
+	$(MAKE) local-ops-run-loop-dry-run
