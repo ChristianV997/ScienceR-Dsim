@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generated_at": "2026-05-21T18:55:18.174720+00:00",
+  "generated_at": "2026-05-21T19:11:54.784044+00:00",
   "toe_validation_claims_allowed": false,
   "final_theory_claims_allowed": false,
   "consciousness_proof_claims_allowed": false,
@@ -10,9 +10,8 @@
   "real_data_auto_execution_allowed": false,
   "live_api_calls_allowed": false,
   "api_key_exposure_allowed": false,
-  "active_goal": "P40",
+  "active_goal": "P40.2",
   "preset": "toe_research",
-  "contribution_target": ">4,000 useful lines if justified.",
   "required_surfaces": [
     "package"
   ],
@@ -24,5 +23,58 @@
   ],
   "next_actions": [
     "validate"
-  ]
+  ],
+  "registry_summary": {
+    "equations": [
+      "EQ-001",
+      "EQ-002",
+      "EQ-003",
+      "EQ-004",
+      "EQ-005",
+      "EQ-006",
+      "EQ-007",
+      "EQ-008",
+      "EQ-009",
+      "EQ-010"
+    ],
+    "cosmology_constraints": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8"
+    ],
+    "gw_constraints": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      null
+    ],
+    "consciousness_theories": [
+      "Global Workspace Theory",
+      "Integrated Information Theory",
+      "Recurrent Processing Theory",
+      "Active Inference",
+      "Higher-Order Theories",
+      "Orch-OR",
+      "Predictive Processing"
+    ],
+    "falsifiers": [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10"
+    ]
+  }
 }

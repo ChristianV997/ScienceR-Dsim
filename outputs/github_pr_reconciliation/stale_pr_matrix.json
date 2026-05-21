@@ -47,6 +47,18 @@
       "unique_commits_vs_main": null,
       "superseded_by_pr": null,
       "recommended_action": "manual_review_required"
+    },
+    {
+      "pr_number": 153,
+      "branch": "duplicate/pr-153",
+      "mergeability": "mergeable",
+      "changed_files": 0,
+      "additions": 0,
+      "deletions": 0,
+      "status": "open",
+      "unique_commits_vs_main": false,
+      "superseded_by_pr": 154,
+      "recommended_action": "close_as_superseded_by_pr_154"
     }
   ]
 }

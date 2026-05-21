@@ -40,7 +40,7 @@ P40 builds a constrained TOE research bridge that remains in engineering and hyp
 The primitive set is treated as candidate telemetry primitives for modeling only. Expansion remains documentation + registry based and is non-promotional.
 
 ## 4) Equation candidate registry
-- Registry keys: {list(equations.keys()) if isinstance(equations, dict) else []}
+- Registry equation IDs: {[entry.get('equation_id') for entry in equations] if isinstance(equations, list) else []}
 - Candidate equations are retained as provisional mappings pending external evidence and explicit falsification pressure.
 
 ## 5) Topology telemetry upgrade
@@ -56,19 +56,19 @@ Computational psychiatry linkage is captured as hypothesis scaffolding for sympt
 Bioelectric and basal cognition notes remain at comparative literature-bridge level with guarded interpretation boundaries.
 
 ## 9) Cosmology constraints
-- Constraint keys: {list(cosmology.keys()) if isinstance(cosmology, dict) else []}
+- Constraint IDs: {[entry.get('constraint_id') for entry in cosmology] if isinstance(cosmology, list) else []}
 - Cosmology constraints are tracked as external boundary conditions.
 
 ## 10) Gravitational-wave constraints
-- Constraint keys: {list(gw.keys()) if isinstance(gw, dict) else []}
+- Constraint IDs: {[entry.get('constraint_id') for entry in gw] if isinstance(gw, list) else []}
 - Gravitational-wave constraints are integrated as compatibility checks for candidate equation behavior.
 
 ## 11) Consciousness adversarial matrix
-- Matrix keys: {list(adversarial.keys()) if isinstance(adversarial, dict) else []}
+- Theories covered: {[entry.get('theory') for entry in adversarial] if isinstance(adversarial, list) else []}
 - Adversarial cases are used to stress-test overreach and unsupported language.
 
 ## 12) Falsifier registry
-- Registry keys: {list(falsifiers.keys()) if isinstance(falsifiers, dict) else []}
+- Falsifier IDs: {[entry.get('id') for entry in falsifiers] if isinstance(falsifiers, list) else []}
 - Falsifiers enumerate failure modes that should block confidence escalation.
 
 ## 13) Guardrails preserved

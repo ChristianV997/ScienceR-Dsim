@@ -12,7 +12,7 @@ P40 builds a constrained TOE research bridge that remains in engineering and hyp
 The primitive set is treated as candidate telemetry primitives for modeling only. Expansion remains documentation + registry based and is non-promotional.
 
 ## 4) Equation candidate registry
-- Registry keys: []
+- Registry equation IDs: ['EQ-001', 'EQ-002', 'EQ-003', 'EQ-004', 'EQ-005', 'EQ-006', 'EQ-007', 'EQ-008', 'EQ-009', 'EQ-010']
 - Candidate equations are retained as provisional mappings pending external evidence and explicit falsification pressure.
 
 ## 5) Topology telemetry upgrade
@@ -28,19 +28,19 @@ Computational psychiatry linkage is captured as hypothesis scaffolding for sympt
 Bioelectric and basal cognition notes remain at comparative literature-bridge level with guarded interpretation boundaries.
 
 ## 9) Cosmology constraints
-- Constraint keys: []
+- Constraint IDs: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8']
 - Cosmology constraints are tracked as external boundary conditions.
 
 ## 10) Gravitational-wave constraints
-- Constraint keys: []
+- Constraint IDs: ['G1', 'G2', 'G3', 'G4', 'G5', None]
 - Gravitational-wave constraints are integrated as compatibility checks for candidate equation behavior.
 
 ## 11) Consciousness adversarial matrix
-- Matrix keys: []
+- Theories covered: ['Global Workspace Theory', 'Integrated Information Theory', 'Recurrent Processing Theory', 'Active Inference', 'Higher-Order Theories', 'Orch-OR', 'Predictive Processing']
 - Adversarial cases are used to stress-test overreach and unsupported language.
 
 ## 12) Falsifier registry
-- Registry keys: []
+- Falsifier IDs: ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10']
 - Falsifiers enumerate failure modes that should block confidence escalation.
 
 ## 13) Guardrails preserved
