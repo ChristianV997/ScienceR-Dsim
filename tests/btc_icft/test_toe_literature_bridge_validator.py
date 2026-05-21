@@ -11,3 +11,12 @@ def test_validator_ok(tmp_path):
     (out/'generation_manifest.json').write_text('{}')
     r=subprocess.run([sys.executable,'-m','tools.toe_research.literature_bridge.validator','--root',str(out),'--json-out',str(out/'v.json')])
     assert r.returncode==0
+
+
+def test_validator_fails_on_empty_registry(tmp_path):
+    out=tmp_path/'o'; out.mkdir(); generate(out)
+    (out/'toe_theory_integration_digest.md').write_text('x')
+    (out/'generation_manifest.json').write_text('{}')
+    (out/'equation_candidate_registry.json').write_text('[]')
+    r=subprocess.run([sys.executable,'-m','tools.toe_research.literature_bridge.validator','--root',str(out),'--json-out',str(out/'v.json')])
+    assert r.returncode!=0

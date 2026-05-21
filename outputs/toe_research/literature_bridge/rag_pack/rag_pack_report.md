@@ -1,1 +1,1 @@
-RAG pack report
+RAG pack report with populated TOE registry summaries.

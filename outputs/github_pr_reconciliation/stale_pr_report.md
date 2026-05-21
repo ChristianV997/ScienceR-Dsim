@@ -1,9 +1,14 @@
 # Stale PR Reconciliation Report
 
 ## Scope
-This report reconciles PRs #142, #143, #144, and #149 after merge of PR #151.
+This report reconciles PRs #142, #143, #144, #149, and #153 after merges of PR #150/#151/#154.
 
 ## Findings
+
+
+### PR #153
+- Identified as duplicate of PR #154 after stale-branch reconciliation.
+- Recommendation: close as duplicate of PR #154.
 
 ### PR #144
 - Current observed state (from manual fixture and merge-context notes): mergeable, open, `0` changed files, `0` additions, `0` deletions.
