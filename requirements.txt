@@ -7,3 +7,9 @@ pyyaml
 joblib
 mne
 pytest
+mne-bids
+edfio
+eegdash
+the_well
+ripser
+persim
