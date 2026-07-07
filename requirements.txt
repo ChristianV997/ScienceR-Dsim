@@ -13,3 +13,4 @@ eegdash
 the_well
 ripser
 persim
+h5py
