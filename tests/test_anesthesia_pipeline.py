@@ -31,6 +31,25 @@ def test_zone_of_lobes():
     assert anp.zone_of("Iz") == "occipital"
 
 
+def test_save_timeseries_writes_csd_array(tmp_path):
+    # durable --save-timeseries capability: a minimal montage-carrying Raw should
+    # persist its scalp channels + names to a loadable .npz (the raw material the
+    # surrogate gate needs, which prior runs discarded).
+    import numpy as np
+    import mne
+    mne.set_log_level("ERROR")
+    chs = ["Fz", "Cz", "Pz", "Oz", "F3", "F4", "P3", "P4"]
+    rng = np.random.default_rng(0)
+    info = mne.create_info(chs, sfreq=256.0, ch_types="eeg")
+    raw = mne.io.RawArray(rng.standard_normal((len(chs), 1000)), info)
+    raw.set_montage(anp._MONTAGE, on_missing="ignore")
+    path = anp.save_timeseries(raw, "sub-001", "awake", "EC", tmp_path)
+    z = np.load(path, allow_pickle=True)
+    assert z["data"].shape[0] == len(chs) and z["data"].shape[1] == 1000
+    assert list(z["ch_names"]) == chs
+    assert str(z["provenance"]) == "real_eeg" and float(z["sfreq"]) == 256.0
+
+
 def test_zone_of_temporal_hemisphere_by_parity():
     assert anp.zone_of("T7") == "temporal_L"     # odd -> left
     assert anp.zone_of("T8") == "temporal_R"     # even -> right

@@ -315,14 +315,38 @@ def conditions_for(sub: str):
     return items
 
 
+def save_timeseries(raw_csd, sub: str, cond: str, run: str, ts_dir: Path) -> str:
+    """Durable capability: persist the CSD-transformed, ICA-cleaned per-recording
+    scalp time series (montage-kept channels only, the exact array the metrics and
+    the surrogate gate operate on) + channel names to a .npz. This is the raw
+    material the surrogate gate needs and which prior runs discarded. Reusable for
+    any future run via --save-timeseries; independent of metric computation.
+    """
+    keep, _xy, _tri = montage_xy_tri(raw_csd.ch_names)
+    ch_names = [raw_csd.ch_names[i] for i in keep]
+    data = raw_csd.get_data()[keep].astype(np.float32)
+    ts_dir.mkdir(parents=True, exist_ok=True)
+    path = ts_dir / f"{sub}_{cond}_{run}.npz"
+    np.savez_compressed(path, data=data, ch_names=np.array(ch_names, dtype=object),
+                        sfreq=float(raw_csd.info["sfreq"]), subject=sub,
+                        condition=cond, run=run, provenance="real_eeg")
+    return str(path)
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--subjects", nargs="+", required=True)
     ap.add_argument("--out", default="/home/user/ds005620/out/results.jsonl")
     ap.add_argument("--raw", default="/home/user/ds005620/raw")
+    ap.add_argument("--save-timeseries", default=None,
+                    help="directory to persist CSD post-ICA per-recording timeseries (.npz)")
+    ap.add_argument("--conditions", nargs="+", default=None,
+                    help="restrict to these conditions (e.g. awake sed); default all")
     args = ap.parse_args()
 
+    ts_dir = Path(args.save_timeseries) if args.save_timeseries else None
+    cond_filter = set(args.conditions) if args.conditions else None
     raw_dir = Path(args.raw); raw_dir.mkdir(parents=True, exist_ok=True)
     out_path = Path(args.out); out_path.parent.mkdir(parents=True, exist_ok=True)
     done = set()
@@ -338,6 +362,8 @@ def main():
     with out_path.open("a") as fh:
         for sub in args.subjects:
             for cond, run, stem in conditions_for(sub):
+                if cond_filter is not None and cond not in cond_filter:
+                    continue
                 if (sub, cond, run) in done:
                     continue
                 t0 = time.time()
@@ -347,6 +373,8 @@ def main():
                 try:
                     raw_csd, n_bad, n_ica, dur = preprocess(vhdr, log)
                     bands, nch = compute_metrics(raw_csd, log)
+                    if ts_dir is not None:
+                        save_timeseries(raw_csd, sub, cond, run, ts_dir)
                     rec = RecordingResult(sub, cond, run, "ok", n_channels=nch,
                                           n_bad_interpolated=n_bad, n_ica_excluded=n_ica,
                                           duration_used_s=dur, bands=bands)
