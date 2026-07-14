@@ -170,3 +170,413 @@ def phase_grid_topology_from_band(
     if not all(np.isfinite(v) for k, v in agg.items() if isinstance(v, float)):
         raise ValueError("Non-finite aggregate topology metrics")
     return agg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Signed / localized phase-defect metrics.
+#
+# The unsigned scalars above (`Qabs`, `defect_density`) sum |winding| over the
+# whole montage, discarding two physically meaningful pieces of information that
+# are available at the point of computation: the sign (chirality) of each defect
+# and its location. Xu, Long, Feng & Gong (2023, Nat. Hum. Behav.) show that for
+# cortical phase singularities ("brain spirals") it is exactly the location
+# (clustering at network boundaries) and rotational direction that carry the
+# task-relevant signal, not the raw unsigned count. The functions below preserve
+# both. They are strictly additive: the unsigned path is untouched, and
+# `np.sum(np.abs(signed_defect_map(...)["signed_winding"]))` reproduces the old
+# `Qabs` on the same inputs, so the new path is a refinement, not a different
+# computation.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _validate_topology_inputs(
+    phase_vec: np.ndarray,
+    xy: np.ndarray,
+    triangles: np.ndarray,
+    amp_vec: np.ndarray | None,
+    amp_quantile: float | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Shared input validation + amplitude masking.
+
+    Mirrors `sensor_phase_topology_metrics` exactly (same checks, same messages,
+    same per-triangle amplitude mask ``np.all(amp[tri] > thr, axis=1)``) so the
+    signed metrics are directly comparable triangle-for-triangle with the unsigned
+    ones on identical inputs. Returns ``(phase_arr, xy_arr, tri_arr, valid_mask)``.
+    """
+    phase_arr = np.asarray(phase_vec, dtype=float)
+    xy_arr = np.asarray(xy, dtype=float)
+    tri_arr = np.asarray(triangles, dtype=int)
+
+    if phase_arr.ndim != 1:
+        raise ValueError(f"phase_vec must be 1D, got {phase_arr.shape}")
+    if xy_arr.ndim != 2 or xy_arr.shape[1] != 2:
+        raise ValueError(f"xy must be shape (n_channels, 2), got {xy_arr.shape}")
+    if tri_arr.ndim != 2 or tri_arr.shape[1] != 3:
+        raise ValueError(f"triangles must be shape (n_triangles, 3), got {tri_arr.shape}")
+    if phase_arr.shape[0] < 3 or xy_arr.shape[0] < 3:
+        raise ValueError("Need at least 3 channels")
+    if phase_arr.shape[0] != xy_arr.shape[0]:
+        raise ValueError("phase_vec and xy must share channel length")
+
+    amp_arr = None if amp_vec is None else np.asarray(amp_vec, dtype=float)
+    if amp_arr is not None and (amp_arr.ndim != 1 or amp_arr.shape[0] != phase_arr.shape[0]):
+        raise ValueError("amp_vec must be 1D with same channel length as phase_vec")
+
+    valid = np.ones(tri_arr.shape[0], dtype=bool)
+    if amp_arr is not None and amp_quantile is not None:
+        thr = np.quantile(amp_arr, amp_quantile)
+        valid = np.all(amp_arr[tri_arr] > thr, axis=1)
+
+    if not np.any(valid):
+        raise ValueError("No valid triangles remain")
+    return phase_arr, xy_arr, tri_arr, valid
+
+
+def signed_defect_map(
+    phase_vec: np.ndarray,
+    xy: np.ndarray,
+    triangles: np.ndarray,
+    amp_vec: np.ndarray | None = None,
+    amp_quantile: float | None = 0.1,
+) -> dict:
+    """Per-triangle signed winding with location — the atomic signed metric.
+
+    Unlike `sensor_phase_topology_metrics`, which collapses to unsigned scalars,
+    this keeps every valid triangle's signed winding, chirality, and centroid.
+    Validity masking is identical to the unsigned path, so the returned triangles
+    are the same subset (same order) it would score. In particular
+    ``np.sum(np.abs(result["signed_winding"]))`` equals the old ``Qabs`` and
+    ``np.round(np.sum(result["signed_winding"]))`` equals the old ``Q``.
+    """
+    phase_arr, xy_arr, tri_arr, valid = _validate_topology_inputs(
+        phase_vec, xy, triangles, amp_vec, amp_quantile
+    )
+    valid_tri = tri_arr[valid]
+    signed_winding = np.array(
+        [triangle_winding(*phase_arr[t]) for t in valid_tri], dtype=float
+    )
+    # centroid of each valid triangle in the input xy coordinate space
+    centroid_xy = xy_arr[valid_tri].mean(axis=1)
+    chirality = np.sign(signed_winding).astype(int)
+    n_valid = int(valid_tri.shape[0])
+
+    if not np.all(np.isfinite(signed_winding)) or not np.all(np.isfinite(centroid_xy)):
+        raise ValueError("Non-finite signed defect map values")
+
+    return {
+        "triangle_indices": valid_tri,
+        "signed_winding": signed_winding,
+        "centroid_xy": centroid_xy,
+        "chirality": chirality,
+        "n_valid_triangles": n_valid,
+        "metric_kind": "signed_defect_map",
+    }
+
+
+def _require_defect_map(defect_map: dict) -> None:
+    required = {"triangle_indices", "signed_winding", "centroid_xy", "chirality", "n_valid_triangles"}
+    missing = required - set(defect_map)
+    if missing:
+        raise ValueError(f"defect_map missing required keys: {sorted(missing)}")
+
+
+def net_charge_by_region(
+    defect_map: dict,
+    region_labels: dict,
+    channel_names: list[str],
+) -> dict:
+    """Aggregate signed winding per caller-supplied region/network label.
+
+    ``region_labels`` maps a channel to a region and may be keyed either by
+    channel *name* (``dict[str, str]``) or by channel *index* (``dict[int, str]``);
+    indices must match the channel ordering used to build ``xy``/``triangles``
+    upstream. ``channel_names`` is that same ordered channel list (index i -> name),
+    used to resolve each triangle's three vertices to region labels.
+
+    Each triangle is assigned to a region by **majority vote among its 3 vertices'
+    labels**. A triangle is left *unassigned* (counted in ``n_unassigned``, never
+    guessed) when (a) any vertex has no label in ``region_labels`` — partial
+    coverage is an expected real-world case, e.g. bad-channel interpolation — or
+    (b) all three vertex labels differ (no majority). Only regions that receive at
+    least one triangle appear as keys, so an absent region means "not sampled"
+    rather than a fabricated zero.
+    """
+    _require_defect_map(defect_map)
+    tri_idx = np.asarray(defect_map["triangle_indices"], dtype=int)
+    signed = np.asarray(defect_map["signed_winding"], dtype=float)
+    chir = np.asarray(defect_map["chirality"], dtype=float)
+    if not isinstance(channel_names, (list, tuple)) or len(channel_names) == 0:
+        raise ValueError("channel_names must be a non-empty list of channel names")
+
+    keys = list(region_labels.keys())
+    by_index = len(keys) > 0 and all(isinstance(k, (int, np.integer)) for k in keys)
+
+    def label_of(ch_index: int):
+        if by_index:
+            return region_labels.get(int(ch_index))
+        if ch_index < 0 or ch_index >= len(channel_names):
+            raise ValueError(
+                f"triangle references channel index {ch_index} outside channel_names "
+                f"(len {len(channel_names)}); defect_map and channel_names are inconsistent"
+            )
+        return region_labels.get(channel_names[ch_index])
+
+    region_net: dict[str, float] = {}
+    region_abs: dict[str, float] = {}
+    region_n: dict[str, int] = {}
+    region_chir_sum: dict[str, float] = {}
+    n_unassigned = 0
+
+    for row, w, c in zip(tri_idx, signed, chir):
+        labs = [label_of(v) for v in row]
+        if any(l is None for l in labs):
+            n_unassigned += 1
+            continue
+        uniq, counts = np.unique(np.asarray(labs, dtype=object), return_counts=True)
+        if counts.max() < 2:  # all three different -> no majority
+            n_unassigned += 1
+            continue
+        region = uniq[int(np.argmax(counts))]
+        region_net[region] = region_net.get(region, 0.0) + float(w)
+        region_abs[region] = region_abs.get(region, 0.0) + abs(float(w))
+        region_n[region] = region_n.get(region, 0) + 1
+        region_chir_sum[region] = region_chir_sum.get(region, 0.0) + float(c)
+
+    region_mean_chirality = {r: region_chir_sum[r] / region_n[r] for r in region_n}
+
+    for d in (region_net, region_abs, region_mean_chirality):
+        if not all(np.isfinite(v) for v in d.values()):
+            raise ValueError("Non-finite region charge metrics")
+
+    return {
+        "region_net_charge": region_net,
+        "region_abs_charge": region_abs,
+        "region_n_triangles": region_n,
+        "region_mean_chirality": region_mean_chirality,
+        "n_unassigned": int(n_unassigned),
+        "metric_kind": "net_charge_by_region",
+    }
+
+
+def _median_nn_distance(points: np.ndarray) -> float:
+    """Median nearest-neighbor distance among points (a scale-free eps default)."""
+    diffs = points[:, None, :] - points[None, :, :]
+    d = np.sqrt((diffs ** 2).sum(axis=-1))
+    np.fill_diagonal(d, np.inf)
+    nn = d.min(axis=1)
+    med = float(np.median(nn[np.isfinite(nn)]))
+    # numerical guard only: coincident centroids can yield 0, which DBSCAN rejects.
+    return med if med > 0 else EPS
+
+
+def defect_spatial_clustering(
+    defect_map: dict,
+    eps: float | None = None,
+    min_samples: int = 3,
+    min_winding_abs: float = 0.1,
+) -> dict:
+    """Do defects pile up in specific zones, or scatter uniformly?
+
+    DBSCAN over the centroids of *non-trivial* defect triangles (those with
+    ``abs(signed_winding) > min_winding_abs`` — an explicit parameter, not a hidden
+    magic number). When ``eps`` is None it is set to the median nearest-neighbor
+    distance among the candidate centroids, so the function adapts to any montage
+    coordinate scale rather than assuming one. With fewer than ``min_samples``
+    candidate centroids no clustering is attempted (returns ``n_clusters == 0``
+    with a note) instead of feeding DBSCAN too little data.
+    """
+    _require_defect_map(defect_map)
+    from sklearn.cluster import DBSCAN
+
+    centroids = np.asarray(defect_map["centroid_xy"], dtype=float)
+    signed = np.asarray(defect_map["signed_winding"], dtype=float)
+    cand_mask = np.abs(signed) > min_winding_abs
+    cand = centroids[cand_mask]
+    cand_w = signed[cand_mask]
+
+    if cand.shape[0] < min_samples:
+        return {
+            "n_clusters": 0,
+            "n_noise": 0,
+            "cluster_centroids": np.empty((0, 2), dtype=float),
+            "cluster_net_charge": np.empty((0,), dtype=float),
+            "cluster_sizes": np.empty((0,), dtype=int),
+            "eps_used": float(eps) if eps is not None else 0.0,
+            "min_samples": int(min_samples),
+            "note": "insufficient candidate defects for clustering",
+            "metric_kind": "defect_spatial_clustering",
+        }
+
+    eps_used = float(eps) if eps is not None else _median_nn_distance(cand)
+    labels = DBSCAN(eps=eps_used, min_samples=min_samples).fit_predict(cand)
+
+    cluster_ids = sorted(l for l in set(labels.tolist()) if l != -1)
+    cluster_centroids = []
+    cluster_net_charge = []
+    cluster_sizes = []
+    for cid in cluster_ids:
+        m = labels == cid
+        cluster_centroids.append(cand[m].mean(axis=0))
+        cluster_net_charge.append(float(cand_w[m].sum()))
+        cluster_sizes.append(int(m.sum()))
+
+    cluster_centroids = (
+        np.asarray(cluster_centroids, dtype=float) if cluster_centroids else np.empty((0, 2), dtype=float)
+    )
+    cluster_net_charge = np.asarray(cluster_net_charge, dtype=float)
+    cluster_sizes = np.asarray(cluster_sizes, dtype=int)
+
+    if not (np.all(np.isfinite(cluster_centroids)) and np.all(np.isfinite(cluster_net_charge))
+            and np.isfinite(eps_used)):
+        raise ValueError("Non-finite spatial clustering metrics")
+
+    return {
+        "n_clusters": int(len(cluster_ids)),
+        "n_noise": int(np.sum(labels == -1)),
+        "cluster_centroids": cluster_centroids,
+        "cluster_net_charge": cluster_net_charge,
+        "cluster_sizes": cluster_sizes,
+        "eps_used": float(eps_used),
+        "min_samples": int(min_samples),
+        "metric_kind": "defect_spatial_clustering",
+    }
+
+
+def _cluster_persistence_proxy(cluster_results: list[dict]) -> float:
+    """Mean survival (in consecutive samples) of defect-cluster lineages.
+
+    Greedy nearest-centroid matching between the clusters at sample t and t+1,
+    accepting a match only within ``2 * eps_used`` of the clustering call at
+    sample t; an unmatched cluster ends its lineage. This is deliberately a simple
+    first-pass proxy, NOT a globally optimal tracker: a low value means defect
+    clusters are transient, a high value means they persist and migrate (as in
+    Gong et al.'s traveling brain spirals). Returns 0.0 for fewer than 2 samples.
+    """
+    T = len(cluster_results)
+    if T < 2:
+        return 0.0
+
+    cents = [np.asarray(cr.get("cluster_centroids"), dtype=float).reshape(-1, 2)
+             for cr in cluster_results]
+    eps = [float(cr.get("eps_used", 0.0)) for cr in cluster_results]
+
+    lengths: list[int] = []
+    # each ongoing lineage: [current_centroid (2,), length_so_far]
+    ongoing = [[c, 1] for c in cents[0]]
+
+    for t in range(1, T):
+        nxt = cents[t]
+        thr = 2.0 * eps[t - 1]  # threshold from the earlier sample's clustering call
+        used: set[int] = set()
+        new_ongoing: list = []
+        for cent, length in ongoing:
+            best, best_d = -1, np.inf
+            for j in range(nxt.shape[0]):
+                if j in used:
+                    continue
+                d = float(np.linalg.norm(nxt[j] - cent))
+                if d < best_d:
+                    best_d, best = d, j
+            if best >= 0 and thr > 0 and best_d <= thr:
+                used.add(best)
+                new_ongoing.append([nxt[best], length + 1])
+            else:
+                lengths.append(length)  # lineage ends
+        for j in range(nxt.shape[0]):
+            if j not in used:
+                new_ongoing.append([nxt[j], 1])  # new lineage starts
+        ongoing = new_ongoing
+
+    for _cent, length in ongoing:
+        lengths.append(length)
+
+    return float(np.mean(lengths)) if lengths else 0.0
+
+
+def signed_defect_topology_from_band(
+    phase: np.ndarray,
+    xy: np.ndarray,
+    triangles: np.ndarray,
+    channel_names: list[str],
+    region_labels: dict | None = None,
+    amplitude: np.ndarray | None = None,
+    amp_quantile: float | None = 0.1,
+    cluster_min_winding_abs: float = 0.1,
+) -> dict:
+    """Time-series wrapper for the signed/localized metrics (parallel to
+    `phase_grid_topology_from_band`, but sign- and location-preserving).
+
+    For each time sample computes `signed_defect_map`; if ``region_labels`` is
+    given, also `net_charge_by_region`; and always `defect_spatial_clustering`.
+    Aggregation deliberately does NOT collapse back to a single unsigned scalar:
+    region charges/chirality are averaged per region over time (net & abs charge
+    treat a region absent in a sample as 0, since an empty set of defects nets to
+    zero; chirality averages only over samples where the region actually appears,
+    to avoid reading "unsampled" as "balanced"), and cluster counts/persistence
+    summarize the spatial structure. ``region_labels=None`` is supported and
+    yields ``None`` for every ``*_by_region`` field.
+    """
+    phase_arr = np.asarray(phase, dtype=float)
+    if phase_arr.ndim != 2:
+        raise ValueError(f"phase must be shape (channels, samples), got {phase_arr.shape}")
+    n_ch, n_t = phase_arr.shape
+    if n_ch < 3 or n_t < 1:
+        raise ValueError("phase requires at least 3 channels and 1 sample")
+    if not isinstance(channel_names, (list, tuple)) or len(channel_names) != n_ch:
+        raise ValueError(
+            f"channel_names must have one entry per channel (expected {n_ch}, "
+            f"got {len(channel_names) if isinstance(channel_names, (list, tuple)) else type(channel_names)})"
+        )
+
+    amp_arr = None if amplitude is None else np.asarray(amplitude, dtype=float)
+    if amp_arr is not None and amp_arr.shape != phase_arr.shape:
+        raise ValueError("amplitude must match phase shape")
+
+    per_region_net: list[dict] = []
+    per_region_abs: list[dict] = []
+    per_region_chir: list[dict] = []
+    per_sample_clusters: list[dict] = []
+    n_clusters_list: list[int] = []
+
+    for t in range(n_t):
+        amp_vec = amp_arr[:, t] if amp_arr is not None else None
+        dm = signed_defect_map(phase_arr[:, t], xy, triangles, amp_vec=amp_vec, amp_quantile=amp_quantile)
+        if region_labels is not None:
+            nc = net_charge_by_region(dm, region_labels, list(channel_names))
+            per_region_net.append(nc["region_net_charge"])
+            per_region_abs.append(nc["region_abs_charge"])
+            per_region_chir.append(nc["region_mean_chirality"])
+        cl = defect_spatial_clustering(dm, min_winding_abs=cluster_min_winding_abs)
+        per_sample_clusters.append(cl)
+        n_clusters_list.append(int(cl["n_clusters"]))
+
+    if region_labels is not None:
+        regions = set().union(*[set(d) for d in per_region_net]) if per_region_net else set()
+        mean_net = {r: float(np.mean([d.get(r, 0.0) for d in per_region_net])) for r in regions}
+        mean_abs = {r: float(np.mean([d.get(r, 0.0) for d in per_region_abs])) for r in regions}
+        mean_chir = {}
+        for r in regions:
+            present = [d[r] for d in per_region_chir if r in d]
+            mean_chir[r] = float(np.mean(present)) if present else 0.0
+        for d in (mean_net, mean_abs, mean_chir):
+            if not all(np.isfinite(v) for v in d.values()):
+                raise ValueError("Non-finite aggregate region metrics")
+    else:
+        mean_net = mean_abs = mean_chir = None
+
+    mean_n_clusters = float(np.mean(n_clusters_list)) if n_clusters_list else 0.0
+    persistence = _cluster_persistence_proxy(per_sample_clusters)
+
+    if not (np.isfinite(mean_n_clusters) and np.isfinite(persistence)):
+        raise ValueError("Non-finite aggregate signed-defect metrics")
+
+    return {
+        "mean_net_charge_by_region": mean_net,
+        "mean_abs_charge_by_region": mean_abs,
+        "mean_region_chirality": mean_chir,
+        "time_resolved_n_clusters": n_clusters_list,
+        "mean_n_clusters": mean_n_clusters,
+        "mean_cluster_persistence_proxy": persistence,
+        "n_timepoints": int(n_t),
+        "metric_kind": "signed_defect_topology",
+    }
