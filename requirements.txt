@@ -14,3 +14,11 @@ the_well
 ripser
 persim
 h5py
+# Pinned (unlike the rest of this file): these are used directly by
+# tools/stream_process_openneuro_dataset.py and tools/stream_process_ds001787.py
+# (S3 dataset sync + the `aws` CLI subprocess) but were previously undeclared here,
+# so a fresh clone would ImportError on either streaming tool. Pinned to the
+# versions verified working this session.
+boto3==1.43.51
+botocore==1.43.51
+awscli==1.45.51
