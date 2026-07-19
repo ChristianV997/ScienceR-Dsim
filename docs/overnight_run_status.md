@@ -19,3 +19,11 @@ Fixed row_id collisions: `data/bids_ingest.py::BIDSEEGRecord` now carries `acq_l
 `ds005620_windows_real.py` now includes session+acq and a short hash of the relative
 path as a hard uniqueness guarantee. Regression test reproduces the exact
 acq-EC/acq-EO collision seen on real data. Full suite: 1623 passed, 9 skipped.
+
+## P0.3 — DONE (commit 18e0168)
+Fixed P9->P10 handoff: `features_m.csv` now writes real per-window rows (matching
+Level T's `REQUIRED_M_COLUMNS`) instead of a single aggregate summary row.
+`metrics_m.json` stays aggregate-only. Verified end-to-end: `run_ds005620_m_real
+--real` output is now successfully consumable by
+`ds005620_real_topology.load_level_m_window_features` (previously raised
+ValueError: Missing required columns). Full suite: 1623 passed, 9 skipped.
