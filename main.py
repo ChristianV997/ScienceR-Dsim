@@ -16,6 +16,7 @@ from pipelines.run_cross_domain import run as run_cross_domain
 from pipelines.run_physionet import run as run_physionet
 from pipelines.run_external import run as run_external
 from pipelines.run_neurolib import run as run_neurolib
+from pipelines.run_fast_tr_validation import run as run_fast_tr_validation
 from database.database import connect, start_run, finish_run, add_metric, add_artifact
 
 def run_synthetic():
@@ -62,7 +63,7 @@ def run_qzt(checkpoint_dir: str):
 def main():
     ap = argparse.ArgumentParser()
     # NOTE: CLI argument contracts by mode are documented in docs/mode_contracts.md.
-    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physionet", "physics", "cross-domain", "external", "neural_mass", "db"])
+    ap.add_argument("--mode", required=True, choices=["synthetic", "qzt", "eeg", "physionet", "physics", "cross-domain", "external", "neural_mass", "fast_tr_validation", "db"])
     # --input is mode-dependent: directory for qzt/eeg/physionet, but a required .npy file for physics.
     ap.add_argument("--input", default="data/checkpoints")
     # "results/out.csv" is a sentinel default; eeg/physionet reinterpret it to mode-specific output paths.
@@ -110,6 +111,15 @@ def main():
             seed=getattr(args, "seed", 0),
         )
         print(f"RunRecord: {record.run_id}")
+    elif args.mode == "fast_tr_validation":
+        record = run_fast_tr_validation(
+            output_csv=args.output,
+            n_voxels=getattr(args, "n_voxels", 32),
+            n_timepoints=getattr(args, "n_timepoints", 500),
+            tr=getattr(args, "tr", 0.645),
+            seed=getattr(args, "seed", 0),
+        )
+        print(f"Fast-TR validation: {record.run_id}")
     elif args.mode == "cross-domain":
         df = run_cross_domain(args.results_root, args.output)
         print(df.head())
