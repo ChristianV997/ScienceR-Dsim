@@ -29,6 +29,28 @@ def test_features_track_signal_not_filename(bids_root):
     assert all("real_bids" in r.warnings[0] for r in rows)
 
 
+def test_subject_filter_narrows_to_one_subject(bids_root):
+    """Regression test: streaming per-subject processing passes the DATASET root
+    plus subject_filter (not a single subject's own directory as bids_root),
+    because mne_bids misparses a root whose own path looks like a sub-XXXX
+    entity, producing doubled/broken file paths -- exactly what broke the
+    initial full-dataset streaming run.
+    """
+    from sciencer_d.btc_icft.level_m.ds005620_windows_real import build_and_extract_real_windows
+
+    all_rows = build_and_extract_real_windows(bids_root, max_channels=4)
+    subjects_present = {r.subject_id for r in all_rows}
+    assert len(subjects_present) >= 2  # sanity: fixture has multiple subjects
+
+    one_subject = sorted(subjects_present)[0]
+    filtered_rows = build_and_extract_real_windows(
+        bids_root, max_channels=4, subject_filter=one_subject
+    )
+    assert filtered_rows  # non-empty
+    assert {r.subject_id for r in filtered_rows} == {one_subject}
+    assert len(filtered_rows) < len(all_rows)
+
+
 def test_row_ids_unique_across_acquisitions(monkeypatch):
     """Regression test: two distinct recordings for the same subject/task/run that only
     differ by the BIDS `acq` entity (e.g. acq-EC vs acq-EO, as in real DS005620) must not

@@ -102,13 +102,20 @@ def process_ds005620_subject(
     subject_root: Path, subject: str, out_dir: Path,
     window_seconds: float, max_windows_per_file: int, max_channels: int,
 ) -> dict:
-    """Run real Level M + Level T for one subject's files; write per-subject CSVs."""
+    """Run real Level M + Level T for one subject's files; write per-subject CSVs.
+
+    `subject_root` is `<dataset_root>/<subject>` (where sync_subject placed this
+    subject's files); `build_and_extract_real_windows` needs the DATASET root
+    (mne_bids misparses a root that looks like a subject directory itself), so we
+    pass its parent and filter to this subject via `subject_filter`.
+    """
     from sciencer_d.btc_icft.level_m.ds005620_windows_real import build_and_extract_real_windows
     from sciencer_d.btc_icft.level_t.ds005620_real_topology import compute_real_topology_for_window
 
     m_rows = build_and_extract_real_windows(
-        str(subject_root), window_seconds=window_seconds,
+        str(subject_root.parent), window_seconds=window_seconds,
         max_windows_per_file=max_windows_per_file, max_channels=max_channels,
+        subject_filter=subject,
     )
     m_dicts = [asdict(r) for r in m_rows]
     _write_rows_csv(out_dir / f"{subject}_features_m.csv", m_dicts)

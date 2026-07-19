@@ -40,9 +40,20 @@ def build_and_extract_real_windows(
     window_seconds: float = 10.0,
     max_windows_per_file: int = 2,
     max_channels: int | None = 16,
+    subject_filter: str | None = None,
 ) -> list[LevelMWindowRow]:
-    """Discover -> window -> extract REAL features. Every row is marked real-EEG-derived."""
+    """Discover -> window -> extract REAL features. Every row is marked real-EEG-derived.
+
+    `bids_root` must be the dataset root (containing participants.tsv/sub-*/ dirs), not
+    a single subject's directory -- mne_bids misparses a root whose own path component
+    looks like a `sub-XXXX` entity, producing doubled/broken paths. To process one
+    subject at a time (e.g. for streaming/disk-bounded processing), pass the full
+    dataset root and use `subject_filter` (matches `BIDSEEGRecord.subject_id`, e.g.
+    "sub-1010") instead of pointing bids_root at that subject's own directory.
+    """
     records = discover_bids_eeg(bids_root)
+    if subject_filter is not None:
+        records = [r for r in records if r.subject_id == subject_filter]
     rows: list[LevelMWindowRow] = []
     for rec in records:
         if not rec.is_eeg_candidate:
