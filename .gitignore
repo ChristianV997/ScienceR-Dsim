@@ -7,3 +7,4 @@ __pycache__/
 project_manifest.json
 paper/figures/
 *.sqlite
+.venv/
