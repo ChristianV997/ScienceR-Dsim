@@ -51,3 +51,37 @@ are not in requirements.txt and this repo's convention is plain CSV everywhere
 (features_m.csv, features_t.csv) — used per-subject CSV files instead rather than
 adding a new dependency for something CSV already does adequately here.
 7/7 tests pass (manifest resume, raw-deletion, failure isolation, --limit).
+
+## P0.6 — DONE
+Re-ran the full real pipeline (run_ds005620_m_real --real, run_ds005620_t_real --real)
+against the 3 real subjects on disk (data/ds005620/{sub-1010,sub-1016,sub-1017}).
+Confirmed all three bugs are fixed on genuine real data:
+- artifact_report.json: artifact_dominance=false, mean_artifact_score=0.029 (was: always 1.0)
+- leakage_report.json: leakage_detected=false, row_ids_unique=true (was: true/false, collision)
+- features_t.csv: 130/130 distinct q_abs values, quality_passed=true, mean_topology_quality=0.999
+  (was: hash-of-row_id noise, same for identical-metadata rows regardless of signal)
+Minor cosmetic issue noticed (not a correctness bug): write_level_t_topology_outputs
+writes the Python list repr "[]" for an empty warnings field instead of an empty
+string (Level M's writer joins with "; " instead) -- harmless, just misleading if
+grepped for non-empty warnings naively. Not fixed tonight; noted for later cleanup.
+
+## P1 — DONE
+Grep-swept level_t/, level_m/, eeg_signal_mt/, pipelines/ for the same two bug
+families (hash-fabrication passed off as real; hardcoded mock regardless of
+--real flag). Only hit: run_eeg_level_t_signal.py:48 has mock_fixture=True, but
+it's correctly gated behind `if mock_fixture:` at the call site (only reached
+when the CLI's own --mock-fixture flag is set) -- not a bug, false positive.
+No other instances found. The two hashlib hits in level_m/eeg_signal_features.py
+and level_t/eeg_signal_topology.py are event_id generation (benign).
+
+## P4 — DONE
+Implemented real PCIst (Comolatti et al. 2019 state-transition variant) in
+validation/pci_validation.py, independently written (not derived from the
+GPLv3 reference implementation -- verified the actual algorithm via the
+published paper's method description before implementing, since guessing
+wrong would repeat the exact bug class this session has been fixing).
+12/12 tests pass, including a comparative sanity check (structured evoked
+response scores higher than pure noise). NOT wired into an end-to-end DS002094
+run -- no DS002094 real extraction pipeline exists yet in this repo (unlike
+DS005620). Building one (TMS-EEG epoch/event-locked window extraction) is
+follow-up work, not attempted tonight given remaining time budget.
