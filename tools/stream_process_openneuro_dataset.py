@@ -127,8 +127,36 @@ def process_ds005620_subject(
     return {"n_m_rows": len(m_dicts), "n_t_rows": len(t_dicts)}
 
 
+def process_ds003969_subject(
+    subject_root: Path, subject: str, out_dir: Path,
+    window_seconds: float, max_windows_per_file: int, max_channels: int,
+) -> dict:
+    """Run real Level M + Level T for one ds003969 subject; write per-subject CSVs.
+
+    Same subject_root.parent + subject_filter pattern as `process_ds005620_subject`
+    (mne_bids misparses a root that looks like a subject directory itself).
+    """
+    from sciencer_d.btc_icft.level_m.ds003969_windows_real import build_and_extract_real_windows
+    from sciencer_d.btc_icft.level_t.ds003969_real_topology import compute_real_topology_for_window
+
+    m_rows = build_and_extract_real_windows(
+        str(subject_root.parent), window_seconds=window_seconds,
+        max_windows_per_file=max_windows_per_file, max_channels=max_channels,
+        subject_filter=subject,
+    )
+    m_dicts = [asdict(r) for r in m_rows]
+    _write_rows_csv(out_dir / f"{subject}_features_m.csv", m_dicts)
+
+    t_rows = [compute_real_topology_for_window(row, max_channels=max_channels) for row in m_dicts]
+    t_dicts = [asdict(r) for r in t_rows]
+    _write_rows_csv(out_dir / f"{subject}_features_t.csv", t_dicts)
+
+    return {"n_m_rows": len(m_dicts), "n_t_rows": len(t_dicts)}
+
+
 DATASET_PROCESSORS = {
     "ds005620": process_ds005620_subject,
+    "ds003969": process_ds003969_subject,
 }
 
 
