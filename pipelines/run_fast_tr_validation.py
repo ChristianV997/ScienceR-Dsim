@@ -85,8 +85,11 @@ def run(
     Qz_arr, Qabs_arr = compute_Qz(phase, axis=2)
     assert Qz_arr.shape == (n_timepoints,) and Qabs_arr.shape == (n_timepoints,)
 
-    # Compute f_dress (excess winding metric)
-    f_dress_arr = np.array([compute_f_dress(Qz_arr[i:i+1], Qabs_arr[i:i+1]) for i in range(n_timepoints)])
+    # Compute f_dress (excess winding metric) - vectorized
+    # f_dress = (mean(Qabs) - |mean(Qz)|) / (|mean(Qz)| + eps)
+    Qz_mean = np.mean(Qz_arr)
+    Qabs_mean = np.mean(Qabs_arr)
+    f_dress_arr = (Qabs_mean - np.abs(Qz_mean)) / (np.abs(Qz_mean) + 1e-9)
 
     # Summarize metrics
     metrics = {

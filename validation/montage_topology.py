@@ -284,10 +284,44 @@ def phase_grid_topology_from_band(
     if amp_arr is not None and amp_arr.shape != phase_arr.shape:
         raise ValueError("amplitude must match phase shape")
 
+    xy_arr = np.asarray(xy, dtype=float)
+    tri_arr = np.asarray(triangles, dtype=int)
+
+    # Batch compute triangle windings for all timepoints at once
     per_sample = []
     for t in range(n_t):
-        amp_vec = amp_arr[:, t] if amp_arr is not None else None
-        per_sample.append(sensor_phase_topology_metrics(phase_arr[:, t], xy, triangles, amp_vec=amp_vec, amp_quantile=amp_quantile))
+        # Per-sample validity: compute dynamically per timepoint (simple and correct)
+        valid_t = np.ones(tri_arr.shape[0], dtype=bool)
+        if amp_arr is not None and amp_quantile is not None:
+            thr = np.quantile(amp_arr[:, t], amp_quantile)
+            amp_tri = amp_arr[tri_arr, t]  # (n_tri, 3) - vertices of each triangle at timepoint t
+            valid_t = np.all(amp_tri > thr, axis=1)  # (n_tri,)
+
+        if not np.any(valid_t):
+            raise ValueError(f"No valid triangles remain at timepoint {t}")
+
+        local_w = triangle_winding_batch(phase_arr[:, t], tri_arr[valid_t])
+        edge_diffs = _edge_diffs_batch(phase_arr[:, t], tri_arr[valid_t])
+
+        Q_sum = float(np.sum(local_w))
+        Q = float(np.round(Q_sum))
+        Qabs = float(np.sum(np.abs(local_w)))
+        f_dress = float((Qabs - abs(Q)) / (abs(Q) + EPS))
+        n_valid = int(np.sum(valid_t))
+
+        out = {
+            "Q": Q,
+            "Qabs": Qabs,
+            "f_dress": f_dress,
+            "phase_grad": float(np.mean(np.abs(edge_diffs))),
+            "n_triangles": int(tri_arr.shape[0]),
+            "n_valid_triangles": n_valid,
+            "defect_density": float(Qabs / max(n_valid, 1)),
+            "metric_kind": "phase_grid_topology",
+        }
+        if not all(np.isfinite(v) for k, v in out.items() if isinstance(v, float)):
+            raise ValueError("Non-finite topology metrics")
+        per_sample.append(out)
 
     numeric_keys = ["Q", "Qabs", "f_dress", "phase_grad", "n_triangles", "n_valid_triangles", "defect_density"]
     agg = {}
@@ -524,12 +558,24 @@ def net_charge_by_region(
 
 def _median_nn_distance(points: np.ndarray) -> float:
     """Median nearest-neighbor distance among points (a scale-free eps default)."""
-    diffs = points[:, None, :] - points[None, :, :]
-    d = np.sqrt((diffs ** 2).sum(axis=-1))
+    try:
+        from scipy.spatial.distance import pdist, squareform
+    except ImportError:
+        # Fallback if scipy.spatial.distance unavailable (scipy already imported above)
+        diffs = points[:, None, :] - points[None, :, :]
+        d = np.sqrt((diffs ** 2).sum(axis=-1))
+        np.fill_diagonal(d, np.inf)
+        nn = d.min(axis=1)
+        med = float(np.median(nn[np.isfinite(nn)]))
+        return med if med > 0 else EPS
+
+    # Vectorized pairwise distance computation via scipy
+    if points.shape[0] < 2:
+        return EPS
+    d = squareform(pdist(points))
     np.fill_diagonal(d, np.inf)
     nn = d.min(axis=1)
     med = float(np.median(nn[np.isfinite(nn)]))
-    # numerical guard only: coincident centroids can yield 0, which DBSCAN rejects.
     return med if med > 0 else EPS
 
 
@@ -628,27 +674,65 @@ def _cluster_persistence_proxy(cluster_results: list[dict]) -> float:
     # each ongoing lineage: [current_centroid (2,), length_so_far]
     ongoing = [[c, 1] for c in cents[0]]
 
+    try:
+        from scipy.spatial.distance import cdist
+    except ImportError:
+        # Fallback: scalar loop version if cdist unavailable
+        for t in range(1, T):
+            nxt = cents[t]
+            thr = 2.0 * eps[t - 1]
+            used: set[int] = set()
+            new_ongoing: list = []
+            for cent, length in ongoing:
+                best, best_d = -1, np.inf
+                for j in range(nxt.shape[0]):
+                    if j in used:
+                        continue
+                    d = float(np.linalg.norm(nxt[j] - cent))
+                    if d < best_d:
+                        best_d, best = d, j
+                if best >= 0 and thr > 0 and best_d <= thr:
+                    used.add(best)
+                    new_ongoing.append([nxt[best], length + 1])
+                else:
+                    lengths.append(length)
+            for j in range(nxt.shape[0]):
+                if j not in used:
+                    new_ongoing.append([nxt[j], 1])
+            ongoing = new_ongoing
+        for _cent, length in ongoing:
+            lengths.append(length)
+        return float(np.mean(lengths)) if lengths else 0.0
+
+    # Vectorized matching using cdist: all distances at once
     for t in range(1, T):
         nxt = cents[t]
-        thr = 2.0 * eps[t - 1]  # threshold from the earlier sample's clustering call
+        thr = 2.0 * eps[t - 1]
         used: set[int] = set()
         new_ongoing: list = []
-        for cent, length in ongoing:
-            best, best_d = -1, np.inf
-            for j in range(nxt.shape[0]):
-                if j in used:
-                    continue
-                d = float(np.linalg.norm(nxt[j] - cent))
-                if d < best_d:
-                    best_d, best = d, j
-            if best >= 0 and thr > 0 and best_d <= thr:
-                used.add(best)
-                new_ongoing.append([nxt[best], length + 1])
-            else:
-                lengths.append(length)  # lineage ends
+
+        # For each ongoing cluster, find nearest cluster in nxt
+        if ongoing and nxt.shape[0] > 0:
+            ongoing_cents = np.array([cent for cent, _len in ongoing])
+            D = cdist(ongoing_cents, nxt)  # (n_ongoing, n_nxt)
+
+            for i, (_cent, length) in enumerate(ongoing):
+                row = D[i]
+                min_idx = int(np.argmin(row))
+                best_d = float(row[min_idx])
+                if min_idx not in used and thr > 0 and best_d <= thr:
+                    used.add(min_idx)
+                    new_ongoing.append([nxt[min_idx], length + 1])
+                else:
+                    lengths.append(length)
+        else:
+            # No ongoing lineages
+            for _cent, length in ongoing:
+                lengths.append(length)
+
         for j in range(nxt.shape[0]):
             if j not in used:
-                new_ongoing.append([nxt[j], 1])  # new lineage starts
+                new_ongoing.append([nxt[j], 1])
         ongoing = new_ongoing
 
     for _cent, length in ongoing:

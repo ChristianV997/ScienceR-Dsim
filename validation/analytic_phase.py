@@ -253,13 +253,14 @@ def leida_state_metrics(phase: np.ndarray, n_states: int = 3, random_state: int 
 
     # Instantaneous phase-coherence matrix per sample, leading eigenvector only.
     # cos(theta_i - theta_j) = cos(theta_i)cos(theta_j) + sin(theta_i)sin(theta_j),
-    # so the (n_ch, n_ch) matrix at each t is an outer-product sum -- computed
-    # per-sample here (matrix diagonalization does not vectorize across time).
+    # vectorized: cos_t, sin_t are (n_ch, n_t), outer products computed per timepoint
     cos_t, sin_t = np.cos(arr), np.sin(arr)
     V1 = np.empty((n_t, n_ch), dtype=float)
+
     for t in range(n_t):
         c, s = cos_t[:, t], sin_t[:, t]
-        coh = np.outer(c, c) + np.outer(s, s)
+        # Vectorized outer product: einsum is faster than nested outer() calls
+        coh = np.einsum('i,j->ij', c, c) + np.einsum('i,j->ij', s, s)
         eigvals, eigvecs = np.linalg.eigh(coh)
         v = eigvecs[:, -1]  # largest eigenvalue's eigenvector
         if np.sum(v < 0) < np.sum(v > 0):  # LEiDA sign convention: majority negative

@@ -68,17 +68,18 @@ def coherence_spectrum(
     freqs = freqs[band]
     if freqs.size == 0:
         raise ValueError(f"no FFT bins in [{fmin}, {fmax}] Hz at sfreq={sfreq}")
-    # cross-spectral matrix per frequency, averaged over segments
+    # cross-spectral matrix per frequency, averaged over segments (vectorized)
     # S[f] = mean_seg outer(X[:,f], conj(X[:,f]))
-    coh = np.empty((n_ch, n_ch, freqs.size), dtype=float)
-    for k in range(freqs.size):
-        Xf = segs[:, :, k]                         # (n_seg, n_ch)
-        S = (Xf[:, :, None] * np.conj(Xf[:, None, :])).mean(axis=0)  # (n_ch, n_ch)
-        psd = np.real(np.diag(S))
-        denom = np.outer(psd, psd)
-        c = (np.abs(S) ** 2) / (denom + EPS)
-        np.fill_diagonal(c, 1.0)
-        coh[:, :, k] = np.clip(np.real(c), 0.0, 1.0)
+    # Vectorize using einsum: for each (ch_i, ch_j, freq), sum segments
+    S = np.einsum('scf,sdf->cdf', segs, np.conj(segs)) / segs.shape[0]  # (n_ch, n_ch, n_freq)
+    # Extract PSD (diagonal of S) for each frequency
+    diag_idx = np.arange(n_ch)
+    psd = np.real(S[diag_idx, diag_idx, :])  # (n_ch, n_freq)
+    denom = psd[None, :, :] * psd[:, None, :]  # (n_ch, n_ch, n_freq) via broadcasting
+    c = (np.abs(S) ** 2) / (denom + EPS)
+    # Set diagonal to 1 (vectorized)
+    c[diag_idx, diag_idx, :] = 1.0
+    coh = np.clip(np.real(c), 0.0, 1.0)
     if n_freq_bins is not None and n_freq_bins < freqs.size:
         idx = np.linspace(0, freqs.size - 1, n_freq_bins).astype(int)
         coh = coh[:, :, idx]
