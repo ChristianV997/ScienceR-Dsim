@@ -12,3 +12,10 @@ z-normalized data) — caused every real window to saturate to artifact_score=1.
 Now divides by signal std (scale-invariant, doesn't degenerate). Added 2 regression
 tests (smooth zero-mean signal must score low, alternating +1/-1 must score high).
 Full suite: 1622 passed, 9 skipped (pre-existing skips, unrelated).
+
+## P0.2 — DONE (commit e581371)
+Fixed row_id collisions: `data/bids_ingest.py::BIDSEEGRecord` now carries `acq_label`
+(from mne_bids `bp.acquisition` / fallback filename parser). row_id in
+`ds005620_windows_real.py` now includes session+acq and a short hash of the relative
+path as a hard uniqueness guarantee. Regression test reproduces the exact
+acq-EC/acq-EO collision seen on real data. Full suite: 1623 passed, 9 skipped.
