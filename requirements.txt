@@ -63,6 +63,16 @@ MFDFA
 # requirement). `fbm` has no numpy version pin and was verified to reproduce
 # antropy's own documented DFA-recovers-H behavior. MIT-licensed.
 fbm
+# Used by sim/speculative/ (segregated theoretical-exploration track, never
+# imported by or fed into the real-EEG pipeline -- see sim/speculative/__init__.py
+# and tests/test_speculative_boundary.py). py-pde: numpy/numba-accelerated PDE
+# solver used as the real spatial-grid/Laplacian-operator engine for the
+# stochastic Langevin-lattice module. MIT-licensed. qutip: cross-validates the
+# hand-rolled non-Hermitian-Hamiltonian/exceptional-point code in
+# analysis/itct/itct_cessation_protocol_v3_full_stack.py against a long-
+# maintained reference implementation. BSD-3-licensed.
+py-pde==0.58.0
+qutip==5.3.0
 # Pinned (unlike the rest of this file): these are used directly by
 # tools/stream_process_openneuro_dataset.py and tools/stream_process_ds001787.py
 # (S3 dataset sync + the `aws` CLI subprocess) but were previously undeclared here,
