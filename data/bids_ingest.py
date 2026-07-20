@@ -158,6 +158,17 @@ def get_channel_names(path: str, max_channels: int | None = None) -> list[str]:
     return [raw.ch_names[i] for i in picks]
 
 
+def get_recording_duration(path: str) -> float:
+    """Return the full recording duration in seconds, without loading signal
+    data (`_read_raw` uses `preload=False`). Needed by any consumer that
+    operates on a full continuous recording rather than a fixed-length
+    window (e.g. microstate segmentation, which needs a long enough stretch
+    of data for modified K-means clustering to produce stable topographies).
+    """
+    raw = _read_raw(path)
+    return float(raw.n_times) / float(raw.info["sfreq"])
+
+
 def read_window_signal(
     path: str,
     window_start_s: float,

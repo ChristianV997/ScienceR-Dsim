@@ -17,6 +17,7 @@ optional_outputs:
   - phase_based_topology_report.json
   - connectivity_report.json
   - spatial_topology_report.json
+  - microstate_report.json
 statistics:
   group_significance:
     enabled_by_default: true
@@ -46,6 +47,13 @@ statistics:
     band: alpha
     sample_size_default: 20 (bounded by default, unlike phase_based_topology -- griddata interpolation is meaningfully more expensive)
     cli_flags: --spatial-band, --spatial-sample-size, --spatial-grid-size, --spatial-n-time-samples
+  microstates:
+    enabled_by_default: true
+    method: pycrostates modified K-means (canonical A/B/C/D-style EEG microstate segmentation) -- unlike every other instrument in this pipeline, operates on the FULL RECORDING per unique source_file, not per window (see sciencer_d/btc_icft/level_t/microstates.py)
+    n_clusters_default: 4
+    sample_size_default: 5 recordings (bounded by default; ModKMeans fitting is the most compute-per-unit-of-data instrument in this pipeline)
+    max_duration_s_default: 120.0 (deterministic truncation of each recording before fitting)
+    cli_flags: --microstate-n-clusters, --microstate-sample-size, --microstate-max-duration-s
 required_columns:
   - row_id
   - subject_id

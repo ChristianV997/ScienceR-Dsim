@@ -34,6 +34,9 @@ def main() -> int:
     p.add_argument("--spatial-sample-size", type=int, default=20, help="Bound the number of windows the spatial topology report runs on (griddata interpolation is meaningfully more expensive than the other reports); 0 means all windows.")
     p.add_argument("--spatial-grid-size", type=int, default=24)
     p.add_argument("--spatial-n-time-samples", type=int, default=10)
+    p.add_argument("--microstate-n-clusters", type=int, default=4)
+    p.add_argument("--microstate-sample-size", type=int, default=5, help="Bound the number of distinct RECORDINGS (not windows) the microstate report fits; 0 means all recordings.")
+    p.add_argument("--microstate-max-duration-s", type=float, default=120.0, help="Truncate each recording to this many seconds before fitting (bounds ModKMeans compute cost); 0 means use the full recording.")
     a = p.parse_args()
 
     if a.real and a.mock_fixture:
@@ -93,10 +96,15 @@ def main() -> int:
         sample_size=(a.spatial_sample_size if a.spatial_sample_size > 0 else None),
         grid_size=a.spatial_grid_size, n_time_samples=a.spatial_n_time_samples,
     )
+    microstate_report = topo.build_microstate_report(
+        m_rows, seed=a.seed, n_clusters=a.microstate_n_clusters,
+        sample_size=(a.microstate_sample_size if a.microstate_sample_size > 0 else None),
+        max_duration_s=(a.microstate_max_duration_s if a.microstate_max_duration_s > 0 else None),
+    )
     paths = topo.write_level_t_topology_outputs(
         res, a.out, null_gate_report=null_gate_report, group_significance_report=group_significance_report,
         phase_based_topology_report=phase_based_topology_report, connectivity_report=connectivity_report,
-        spatial_topology_report=spatial_topology_report,
+        spatial_topology_report=spatial_topology_report, microstate_report=microstate_report,
     )
     for k, v in paths.items():
         print(f"{k}: {v}")

@@ -36,6 +36,11 @@ mne-connectivity
 # implementations. Both BSD-3-licensed.
 antropy
 specparam
+# Used by sciencer_d/btc_icft/level_t/microstates.py for real modified
+# K-means EEG microstate segmentation (canonical A/B/C/D-style analysis) --
+# the maintained, published implementation, not a custom reimplementation.
+# BSD-3-licensed.
+pycrostates
 # Used by data/preprocessing.py's opt-in heavier artifact-rejection mode
 # (autoreject: cross-validated per-epoch/per-channel statistical rejection;
 # mne-icalabel: automated ICA component classification for eye/muscle/heart
