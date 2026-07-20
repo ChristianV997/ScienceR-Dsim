@@ -13,16 +13,25 @@ from sciencer_d.btc_icft.level_m.ds005620_windows import (
     load_bids_inspection_outputs,
     write_level_m_window_outputs,
 )
-from sciencer_d.btc_icft.level_m.real_features import build_real_level_m_features_report
+from sciencer_d.btc_icft.level_m.real_features import build_mfdfa_report, build_real_level_m_features_report
 
 
 def _write_real_features_report(result, out_dir: str, sample_size: int | None) -> str:
     """Additive real-Level-M-features report (band power, complexity,
-    aperiodic spectral decomposition -- see real_features.py's docstring for
-    why this is a separate, new output rather than a change to the existing
-    features_m.csv's _proxy columns)."""
+    aperiodic spectral decomposition, DFA -- see real_features.py's
+    docstring for why this is a separate, new output rather than a change to
+    the existing features_m.csv's _proxy columns)."""
     report = build_real_level_m_features_report(result.rows, sample_size=sample_size)
     path = Path(out_dir) / "real_level_m_features_report.json"
+    path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def _write_mfdfa_report(result, out_dir: str, sample_size: int | None, max_duration_s: float | None) -> str:
+    """Additive multifractal-DFA report, per-recording not per-window (see
+    real_features.py::build_mfdfa_report's docstring)."""
+    report = build_mfdfa_report(result.rows, sample_size=sample_size, max_duration_s=max_duration_s)
+    path = Path(out_dir) / "mfdfa_report.json"
     path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return str(path)
 
@@ -42,6 +51,11 @@ def main() -> int:
     parser.add_argument("--real-features-sample-size", type=int, default=0,
                         help="Bound how many windows the real band-power/complexity/aperiodic "
                              "features report (real_level_m_features_report.json) runs on; 0 means all windows.")
+    parser.add_argument("--mfdfa-sample-size", type=int, default=5,
+                        help="Bound the number of distinct RECORDINGS (not windows) the multifractal-DFA "
+                             "report fits; 0 means all recordings.")
+    parser.add_argument("--mfdfa-max-duration-s", type=float, default=120.0,
+                        help="Truncate each recording to this many seconds before MFDFA fitting; 0 means use the full recording.")
     args = parser.parse_args()
 
     if args.real:
@@ -64,6 +78,10 @@ def main() -> int:
         paths = write_level_m_window_outputs(result, args.out)
         paths["real_level_m_features_report"] = _write_real_features_report(
             result, args.out, sample_size=(args.real_features_sample_size or None)
+        )
+        paths["mfdfa_report"] = _write_mfdfa_report(
+            result, args.out, sample_size=(args.mfdfa_sample_size if args.mfdfa_sample_size > 0 else None),
+            max_duration_s=(args.mfdfa_max_duration_s if args.mfdfa_max_duration_s > 0 else None),
         )
         for k, v in paths.items():
             print(f"{k}: {v}")

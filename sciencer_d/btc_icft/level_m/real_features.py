@@ -141,18 +141,112 @@ def compute_aperiodic_spectral_features(
     }
 
 
+DFA_MIN_SAMPLES = 100
+MFDFA_MIN_SAMPLES = 1000
+
+
+def compute_dfa_features(signal) -> dict:
+    """Real Detrended Fluctuation Analysis (DFA) scaling exponent (a Hurst-
+    exponent proxy) via `antropy.detrended_fluctuation` -- long-range
+    temporal correlation (LRTC), a genuine, published EEG-criticality
+    measure (Hardstone et al. 2012, cited directly in `antropy`'s own
+    docstring) with no prior instrument in this pipeline measuring temporal
+    scaling at all (Phase 2's band power/complexity/aperiodic features are
+    all frequency- or amplitude-domain, not scale-invariance measures).
+
+    `antropy.detrended_fluctuation` does not raise on short input -- it
+    silently returns exactly 0.0 below its effective minimum length
+    (verified empirically: degenerate at n=50, recovers ~0.5 on random noise
+    by n=100). This wrapper gates on `DFA_MIN_SAMPLES` explicitly rather than
+    trusting that silent degenerate value, matching this repo's established
+    skip-and-report convention.
+
+    Report the raw `dfa_alpha` value only -- do not label any specific
+    range "healthy," "critical," or a consciousness marker in report text;
+    cite the literature's association and stop there.
+    """
+    import antropy as ant
+
+    sig = np.asarray(signal, dtype=float)
+    if len(sig) < DFA_MIN_SAMPLES:
+        return {"dfa_alpha": float("nan")}
+    return {"dfa_alpha": float(ant.detrended_fluctuation(sig))}
+
+
+def compute_mfdfa_features(
+    signal, q_range: tuple[float, float] = (-4.0, 4.0), n_q: int = 17,
+) -> dict:
+    """Real Multifractal Detrended Fluctuation Analysis via `MFDFA` -- the
+    generalized Hurst exponent h(q) and the multifractal singularity
+    spectrum width `Δα = α_max - α_min`, a measure of how much a signal's
+    scaling behavior varies across large vs. small fluctuations (a single
+    monofractal DFA exponent assumes uniform scaling; real neural signals
+    often don't have it).
+
+    Needs substantially more data than plain DFA to converge -- `MFDFA_MIN_SAMPLES`
+    (1000) is a conservative floor, not a guarantee of a converged estimate;
+    this repo's ~4-10s windows will mostly fail this gate at typical sample
+    rates and return NaN-with-reason, which is the correct behavior, not a
+    bug. Prefer running this against full-recording reads (the same pattern
+    `sciencer_d/btc_icft/level_t/microstates.py::compute_microstates_for_recording`
+    uses) rather than short windows where feasible.
+
+    Returns NaN placeholders (not a raised exception) for input too short or
+    too degenerate to fit -- matches this repo's established skip-and-report
+    convention.
+    """
+    import MFDFA
+
+    _nan_result = {"mfdfa_delta_alpha": float("nan"), "mfdfa_alpha_min": float("nan"), "mfdfa_alpha_max": float("nan")}
+
+    sig = np.asarray(signal, dtype=float)
+    if len(sig) < MFDFA_MIN_SAMPLES:
+        return _nan_result
+
+    q = np.linspace(q_range[0], q_range[1], n_q)
+    q = q[q != 0]  # q=0 needs a separate log-averaging formula MFDFA doesn't take directly
+
+    lag = np.unique(np.logspace(0.7, np.log10(len(sig) / 4), 30).astype(int))
+    lag = lag[lag > 2]
+    if len(lag) < 5:
+        return _nan_result
+
+    try:
+        lag_out, fluctuation = MFDFA.MFDFA(sig, lag=lag, q=q)
+        alpha, _f_alpha = MFDFA.singspect.singularity_spectrum(lag_out, fluctuation, q)
+    except Exception:
+        return _nan_result
+
+    alpha = alpha[np.isfinite(alpha)]
+    if len(alpha) < 2:
+        return _nan_result
+
+    return {
+        "mfdfa_delta_alpha": float(alpha.max() - alpha.min()),
+        "mfdfa_alpha_min": float(alpha.min()),
+        "mfdfa_alpha_max": float(alpha.max()),
+    }
+
+
 def extract_real_level_m_features(signal, sfreq: float, bands: dict | None = None) -> dict:
     """All real Level M features for one window: band power, complexity,
-    aperiodic spectral decomposition -- one call combining the three helpers
-    above, matching the single-dict shape callers expect from
-    `sciencer_d/btc_icft/level_m/features.py::extract_level_m_features`
+    aperiodic spectral decomposition, DFA scaling exponent -- one call
+    combining the helpers above, matching the single-dict shape callers
+    expect from `sciencer_d/btc_icft/level_m/features.py::extract_level_m_features`
     while being entirely additive to it (new, separately-named keys; no
     overlap with the existing `_proxy` columns).
+
+    `compute_mfdfa_features` is deliberately NOT included here -- its
+    `MFDFA_MIN_SAMPLES` floor is far above what a single window typically
+    provides, so bundling it into the default per-window call would return
+    NaN in the overwhelming majority of cases. Call it directly on longer
+    (ideally full-recording) signal instead.
     """
     result: dict[str, float] = {}
     result.update(compute_band_power(signal, sfreq, bands=bands))
     result.update(compute_complexity_features(signal))
     result.update(compute_aperiodic_spectral_features(signal, sfreq))
+    result.update(compute_dfa_features(signal))
     return result
 
 
@@ -217,12 +311,97 @@ def build_real_level_m_features_report(
 
     return {
         "status": "real_level_m_features_computed",
-        "method": "welch_band_power + antropy_complexity + specparam_aperiodic",
+        "method": "welch_band_power + antropy_complexity + specparam_aperiodic + antropy_dfa",
         "n_windows_computed": len(computed),
         "n_windows_skipped": len(skipped),
         "n_windows_total_candidates": len(m_rows),
         "mean_by_feature": {k: _mean(k) for k in sorted(summary_keys)},
         "seed": seed,
         "sample_size": sample_size,
+        "results": results,
+    }
+
+
+def compute_mfdfa_for_recording(
+    source_file: str, max_channels: int | None = 16, max_duration_s: float | None = 120.0,
+) -> dict:
+    """Real multifractal DFA for one full recording (not a window -- see
+    `compute_mfdfa_features`'s docstring: its minimum-sample floor is far
+    above what a single window provides). Mirrors
+    `sciencer_d/btc_icft/level_t/microstates.py::compute_microstates_for_recording`'s
+    full-recording-read pattern (same rationale: this instrument needs a
+    long, continuous stretch, not a short window).
+
+    `max_duration_s` bounds compute cost the same way it does there --
+    the first `max_duration_s` seconds of the recording are used by default
+    (deterministic truncation, not a random subsample); `None` uses the full
+    recording.
+    """
+    from data.bids_ingest import get_recording_duration, read_window_signal
+
+    if not source_file or not Path(source_file).exists():
+        return {"source_file": source_file, "status": "skipped", "reason": f"source file not found: {source_file!r}"}
+
+    try:
+        duration = get_recording_duration(source_file)
+    except Exception as exc:
+        return {"source_file": source_file, "status": "skipped", "reason": f"metadata read failed: {exc}"}
+
+    window_end = duration if max_duration_s is None else min(duration, max_duration_s)
+    try:
+        signal = read_window_signal(source_file, 0.0, window_end, pick="mean", max_channels=max_channels)
+    except ValueError as exc:
+        return {"source_file": source_file, "status": "skipped", "reason": f"signal read failed: {exc}"}
+
+    result = compute_mfdfa_features(signal)
+    if not np.isfinite(result["mfdfa_delta_alpha"]):
+        return {
+            "source_file": source_file, "status": "skipped",
+            "reason": f"too few samples for MFDFA (need >={MFDFA_MIN_SAMPLES}, "
+                      f"got {len(np.asarray(signal))} at duration_used_s={window_end})",
+        }
+
+    return {"source_file": source_file, "status": "computed", "duration_used_s": window_end, **result}
+
+
+def build_mfdfa_report(
+    m_rows: list[dict], sample_size: int | None = 5, seed: int = 0,
+    max_channels: int | None = 16, max_duration_s: float | None = 120.0,
+) -> dict:
+    """Aggregate `compute_mfdfa_for_recording` over unique recordings
+    (`source_file` values) referenced by `m_rows` -- NOT per window row, same
+    dedup convention as `microstates.py::build_microstate_report`.
+    `sample_size` bounds the number of distinct RECORDINGS fit (real MFDFA is
+    the most compute-heavy per-unit-of-data instrument this pipeline has,
+    after microstate ModKMeans fitting), default 5.
+    """
+    unique_files = sorted({str(m.get("source_file")) for m in m_rows if m.get("source_file")})
+    candidate_files = unique_files
+    if sample_size is not None and len(candidate_files) > sample_size:
+        rng = np.random.default_rng(seed)
+        idx = rng.choice(len(candidate_files), size=sample_size, replace=False)
+        candidate_files = [candidate_files[i] for i in sorted(idx)]
+
+    results = [
+        compute_mfdfa_for_recording(f, max_channels=max_channels, max_duration_s=max_duration_s)
+        for f in candidate_files
+    ]
+    computed = [x for x in results if x["status"] == "computed"]
+    skipped = [x for x in results if x["status"] != "computed"]
+
+    def _mean(key: str) -> float:
+        vals = [x[key] for x in computed if key in x and np.isfinite(x[key])]
+        return float(np.mean(vals)) if vals else float("nan")
+
+    return {
+        "status": "mfdfa_computed",
+        "method": "MFDFA singularity_spectrum (multifractal detrended fluctuation analysis), per-recording not per-window",
+        "n_recordings_computed": len(computed),
+        "n_recordings_skipped": len(skipped),
+        "n_recordings_total_candidates": len(unique_files),
+        "mean_delta_alpha": _mean("mfdfa_delta_alpha"),
+        "seed": seed,
+        "sample_size": sample_size,
+        "max_duration_s": max_duration_s,
         "results": results,
     }

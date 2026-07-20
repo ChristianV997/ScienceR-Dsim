@@ -47,6 +47,22 @@ pycrostates
 # artifacts). Both from the MNE ecosystem, both BSD-3-licensed.
 autoreject
 mne-icalabel
+# Used by sciencer_d/btc_icft/level_m/real_features.py for real multifractal
+# Detrended Fluctuation Analysis (the singularity spectrum width Delta-alpha)
+# -- genuine EEG long-range-temporal-correlation/criticality literature
+# (Hardstone et al. 2012), previously entirely absent from this pipeline's
+# feature set. MIT-licensed. (Plain monofractal DFA uses antropy, already
+# declared above -- no new dependency needed for that part.)
+MFDFA
+# Used by tests/btc_icft/test_dfa_mfdfa_features.py to generate fractional
+# Gaussian noise of known Hurst exponent as synthetic ground truth for the
+# DFA/MFDFA wrappers above. Deliberately NOT `stochastic` (the package
+# antropy's own docstring examples use for this): `stochastic` hard-pins
+# numpy<2.0, which conflicts with this repo's numpy>=2.0 stack (confirmed:
+# installing it forced a numpy downgrade that broke zarr's numpy>=2.0
+# requirement). `fbm` has no numpy version pin and was verified to reproduce
+# antropy's own documented DFA-recovers-H behavior. MIT-licensed.
+fbm
 # Pinned (unlike the rest of this file): these are used directly by
 # tools/stream_process_openneuro_dataset.py and tools/stream_process_ds001787.py
 # (S3 dataset sync + the `aws` CLI subprocess) but were previously undeclared here,
