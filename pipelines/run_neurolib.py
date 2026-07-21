@@ -5,13 +5,15 @@ model, extract analytic phase, compute topology metrics, and emit RunRecord.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
 import numpy as np
 
 from core.topology import compute_Qz
-from runs.run_record import RunRecordV1, build_run_id, write_json
+from runs.run_record import RunRecordV1, write_json
 
 
 def run(
@@ -45,55 +47,78 @@ def run(
     RunRecordV1
         Record with observed + null topology metrics, emitted to output_csv.
     """
+    _VALID_MODEL_TYPES = ("kuramoto", "hopf", "wilson_cowan", "aln")
+    if model_type not in _VALID_MODEL_TYPES:
+        raise ValueError(f"Unknown model_type: {model_type}. Choose from {list(_VALID_MODEL_TYPES)}")
+
     try:
-        import neurolib.models as nlib_models
-        from neurolib.utils.functions import fc
+        import neurolib  # noqa: F401  (import-availability check)
     except Exception as exc:  # pragma: no cover
         raise ValueError("neurolib is required for neural mass pipeline") from exc
 
     np.random.seed(seed)
+    Cmat = _generate_random_connectivity(n_nodes, seed)
 
-    # Map model names to neurolib classes
-    model_map = {
-        "kuramoto": nlib_models.KuramotoModel,
-        "hopf": nlib_models.HopfModel,
-        "wilson_cowan": nlib_models.WilsonCowanModel,
-        "aln": nlib_models.ALNModel,
-    }
-    if model_type not in model_map:
-        raise ValueError(f"Unknown model_type: {model_type}. Choose from {list(model_map.keys())}")
-
-    model_class = model_map[model_type]
-
-    # Instantiate model
-    model = model_class(Cmat=_generate_random_connectivity(n_nodes, seed))
-    model.params["dt"] = dt
-    model.params["duration"] = t_max * 1000  # neurolib uses ms
-
-    # Set up node parameters (frequencies, etc.)
-    model.params["coupling"] = coupling
     if model_type == "kuramoto":
-        model.params["omega"] = np.random.randn(n_nodes) * 0.1
-    elif model_type in ("hopf", "wilson_cowan"):
-        # Default initialization should work; can add frequency tuning if needed
-        pass
-    elif model_type == "aln":
-        model.params["exc_init"] = np.random.randn(n_nodes) * 0.1
+        # neurolib's models/ package (checked against the installed 0.6.2)
+        # has no Kuramoto model -- only multimodel, hopf, wc, aln, ww, fhn,
+        # thalamus, bold. Integrate the canonical Kuramoto phase-coupling ODE
+        # directly (dtheta_i/dt = omega_i + coupling * sum_j Cmat_ij *
+        # sin(theta_j - theta_i)) over this pipeline's own Cmat, matching
+        # the same coupling term this repo already uses for a spatial-grid
+        # Kuramoto field in validation/synthetic.py::kuramoto_vortex_field.
+        timeseries = _integrate_kuramoto(n_nodes, coupling, dt, t_max, seed, Cmat)
+    else:
+        # neurolib.models has no top-level re-exports (its __init__.py is
+        # empty) -- model classes must be imported from their own
+        # submodules, and Wilson-Cowan's class is named WCModel, not
+        # WilsonCowanModel.
+        if model_type == "hopf":
+            from neurolib.models.hopf.model import HopfModel as model_class
+        elif model_type == "wilson_cowan":
+            from neurolib.models.wc.model import WCModel as model_class
+        else:  # aln
+            from neurolib.models.aln.model import ALNModel as model_class
 
-    # Run integration
-    try:
-        model.run()
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(f"Integration failed for {model_type} model") from exc
+        # Dmat (inter-node distance/delay matrix): neurolib defaults this to
+        # None when only Cmat is given, and every one of these models' own
+        # timeIntegration multiplies it by a scalar unconditionally
+        # (computeDelayMatrix), raising a TypeError before any integration
+        # happens. Zero distances = no signal-propagation delay, the
+        # standard simplification when no real inter-node geometry exists.
+        model = model_class(Cmat=Cmat, Dmat=np.zeros((n_nodes, n_nodes)))
+        model.params["dt"] = dt
+        model.params["duration"] = t_max * 1000  # neurolib uses ms
+        if model_type in ("hopf", "wilson_cowan"):
+            # `coupling` in these models' params is a categorical string
+            # ("diffusive"/"additive" -- the coupling TYPE), not a numeric
+            # strength; overwriting it with a float made every hopf/wc run
+            # raise inside neurolib's own timeIntegration. `K_gl` is the
+            # actual global coupling STRENGTH parameter for both.
+            model.params["K_gl"] = coupling
+        elif model_type == "aln":
+            model.params["exc_init"] = np.random.randn(n_nodes) * 0.1
 
-    # Extract phase timeseries from firing rates / membrane potential
-    # neurolib stores output in model.bold (if BOLD model is on) or model.rates/model.exc
-    if hasattr(model, "rates") and model.rates is not None:
-        timeseries = model.rates
-    elif hasattr(model, "exc") and model.exc is not None:
-        timeseries = model.exc
-    else:  # pragma: no cover
-        raise ValueError("Could not extract timeseries from neurolib model")
+        try:
+            model.run()
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError(f"Integration failed for {model_type} model") from exc
+
+        # Extract phase timeseries -- the output attribute name is
+        # model-specific in neurolib, not a uniform `rates`/`exc` contract:
+        # HopfModel exposes `.x` (complex oscillator state's real part),
+        # WCModel exposes `.exc` (excitatory population rate), ALNModel
+        # exposes `.rates_exc` (checked against the installed neurolib 0.6.2).
+        if hasattr(model, "rates") and model.rates is not None:
+            timeseries = model.rates
+        elif hasattr(model, "exc") and model.exc is not None:
+            timeseries = model.exc
+        elif hasattr(model, "rates_exc") and model.rates_exc is not None:
+            timeseries = model.rates_exc
+        elif hasattr(model, "x") and model.x is not None:
+            timeseries = model.x
+        else:  # pragma: no cover
+            raise ValueError("Could not extract timeseries from neurolib model")
 
     # Compute analytic phase via Hilbert transform
     try:
@@ -143,14 +168,20 @@ def run(
         "seed": seed,
         "use_bold_model": use_bold_model,
     }
-    run_id_final = run_id or build_run_id(spec_id, sim_params)
+    if run_id is not None:
+        run_id_final = run_id
+    else:
+        # RunRecordV1 has no `sim_params` field and `build_run_id()` needs
+        # git/argv context this pipeline doesn't have -- deterministic hash
+        # over spec_id/sim_params only, matching pipelines/hypothesis.py's
+        # run_id convention.
+        blob = json.dumps({"spec_id": spec_id, "sim_params": sim_params}, sort_keys=True, separators=(",", ":"))
+        run_id_final = hashlib.sha256(blob.encode()).hexdigest()[:16]
 
-    record = RunRecordV1(
+    record = RunRecordV1.make(
         run_id=run_id_final,
         run_kind="neural_mass",
         spec_id=spec_id,
-        timestamp_utc=None,
-        sim_params=sim_params,
         metrics=metrics,
         artifacts={
             "phase_timeseries_shape": list(phase.shape),
@@ -161,7 +192,12 @@ def run(
                 "max": float(np.max(phase)),
             },
         },
+        source="pipelines.run_neurolib",
     )
+    # `sim_params` isn't one of RunRecordV1.make()'s parameters, but the
+    # dataclass's own `input` field is documented as "sim input params" --
+    # this is exactly that.
+    record.input = sim_params
 
     # Write to output
     output_path = Path(output_csv)
@@ -169,6 +205,28 @@ def run(
     write_json(record, output_path)
 
     return record
+
+
+def _integrate_kuramoto(
+    n_nodes: int, coupling: float, dt: float, t_max: float, seed: int, Cmat: np.ndarray,
+) -> np.ndarray:
+    """Native Kuramoto phase-oscillator integration (forward Euler).
+
+    Returns a (n_nodes, n_steps) real-valued signal (sin of each oscillator's
+    phase) so downstream Hilbert-transform phase extraction, which every
+    other model_type's output already goes through, applies unchanged.
+    """
+    rng = np.random.default_rng(seed)
+    omega = rng.standard_normal(n_nodes) * 0.1
+    theta = rng.uniform(0, 2 * np.pi, n_nodes)
+    n_steps = max(int(t_max / dt), 3)
+    theta_ts = np.zeros((n_nodes, n_steps))
+    for t in range(n_steps):
+        theta_ts[:, t] = theta
+        diff = theta[None, :] - theta[:, None]
+        coupling_term = (Cmat * np.sin(diff)).sum(axis=1)
+        theta = theta + dt * (omega + coupling * coupling_term)
+    return np.sin(theta_ts)
 
 
 def _generate_random_connectivity(n_nodes: int, seed: int) -> np.ndarray:

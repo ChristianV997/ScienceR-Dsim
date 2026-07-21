@@ -62,7 +62,9 @@ def test_run_neurolib_hopf():
             seed=42,
         )
         assert record is not None
-        assert record.sim_params["model_type"] == "hopf"
+        # RunRecordV1 has no `sim_params` field; sim input params live on
+        # the canonical `input` field (see runs/run_record.py).
+        assert record.input["model_type"] == "hopf"
 
 
 def test_run_neurolib_invalid_model():
