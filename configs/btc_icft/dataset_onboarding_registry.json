@@ -6,7 +6,7 @@
     "ds005620": {
       "dataset_id": "ds005620",
       "title": "OpenNeuro propofol sedation EEG DS005620",
-      "task_to_state": {"awake": "awake", "sedated": "sedated"},
+      "task_to_state": {"awake": "awake", "sed": "sedated", "sed2": "sedated"},
       "contrasts": [
         {"name": "awake_vs_sedated", "label_field": "state_label", "class0": "awake", "class1": "sedated"},
         {"name": "responsive_vs_unresponsive", "label_field": "behavior_label", "class0": "responsive", "class1": "unresponsive"},
@@ -20,7 +20,7 @@
       "report_input_source": "- Source: local BIDS inspection outputs or mock fixture mode.",
       "report_extra_window_lines": ["- window-feature candidates prepared."],
       "report_extra_next_step_lines": ["- This is for future residual testing."],
-      "format_note": "EDF; propofol sedation; awake vs sedated"
+      "format_note": "EDF; propofol sedation; real BIDS task labels are awake/sed/sed2 (sed=77, sed2=49, awake=56 recordings) -- sed and sed2 both map to sedated per human decision (no_label_inference); the earlier {\"sedated\":\"sedated\"} key was a phantom that matched no real task and silently blanked every sedation window"
     },
     "ds003969": {
       "dataset_id": "ds003969",
@@ -145,6 +145,23 @@
       "report_extra_window_lines": ["- state_label is the dataset's own stage_hum consensus label (wake/n1/n2/n3/rem), read per-epoch from events.tsv -- not derived from a task-entity map (task_to_state is unused for this dataset; see sciencer_d/btc_icft/level_m/ds005555_windows_real.py)."],
       "report_extra_next_step_lines": [],
       "format_note": "EDF; CC0; 6ch PSG 10-20 (F3/F4/C3/C4/O1/O2) + EOG/EMG/respiratory (excluded); acq-psg only (acq-headband, 2ch forehead, intentionally excluded); state comes from per-epoch events.tsv stage_hum (0=wake,1=n1,2=n2,3=n3,4=rem; 8=disconnection and -2=artifact excluded), NOT task_to_state -- requires the dedicated ds005555_windows_real.py windower, not the generic fixed-interval streaming path"
+    },
+    "ds004541": {
+      "dataset_id": "ds004541",
+      "title": "OpenNeuro multimodal EEG-fNIRS under general anesthesia ds004541",
+      "task_to_state": {},
+      "contrasts": [
+        {"name": "awake_vs_anesthetized", "label_field": "state_label", "class0": "awake", "class1": "anesthetized"}
+      ],
+      "default_task": "awake_vs_anesthetized",
+      "window_seconds": 10.0,
+      "max_windows_per_file": 10,
+      "max_channels": 16,
+      "report_input_heading": "## Input",
+      "report_input_source": "- Source: real BIDS EEG signal (task-anesthesia; awake vs anesthetized intervals bounded by the real loc/roc consciousness-transition markers).",
+      "report_extra_window_lines": ["- state_label comes from the dataset's own loss-of-consciousness (loc) and recovery-of-consciousness (roc) event markers: awake = start->loc, anesthetized = loc->roc (or ->end); subjects with no loc marker yield no windows (no_label_inference). See sciencer_d/btc_icft/level_m/ds004541_windows_real.py."],
+      "report_extra_next_step_lines": [],
+      "format_note": "EDF; CC0; 58ch EEG 10-20 (standard names, no prefix) + fNIRS .snirf (fNIRS ignored, EEG-only path); non-contiguous subject IDs (sub-02,03,04,07,08,09,10,11 -- no 01/05/06); state from loc/roc events.tsv markers, NOT task_to_state -- requires the dedicated ds004541_windows_real.py windower; some subjects (e.g. sub-11) lack loc/roc and are skipped"
     }
   }
 }
