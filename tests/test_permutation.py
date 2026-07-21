@@ -122,6 +122,104 @@ def test_subject_blocked_requires_exactly_two_groups():
 
 
 # ---------------------------------------------------------------------------
+# Within-subject (paired) design detection -- the ds003816/ds005620/ds003969
+# fix: every subject is measured in BOTH conditions, so the correct test is a
+# paired sign-flip, not the between-subjects unpaired test.
+# ---------------------------------------------------------------------------
+
+def _make_within_subject_df(subject_effect: dict[str, float], n_windows: int,
+                            within_noise: float, seed: int) -> pd.DataFrame:
+    """Each subject appears in BOTH groups A and B; `subject_effect[s]` is the
+    per-subject B-minus-A shift (the paired effect for that subject)."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for subject, eff in subject_effect.items():
+        base = rng.normal(0, 1.0)  # subject's own baseline (nuisance, paired out)
+        for group, level in (("A", 0.0), ("B", eff)):
+            for _w in range(n_windows):
+                rows.append({
+                    "subject_id": subject,
+                    "group": group,
+                    "value": base + level + rng.normal(0, within_noise),
+                })
+    return pd.DataFrame(rows)
+
+
+def test_subject_blocked_detects_within_subject_design_and_uses_paired():
+    """When every subject is in both groups, the method must switch to the
+    paired sign-flip test, not the unpaired between-subjects test."""
+    df = _make_within_subject_df({f"s{i}": 0.0 for i in range(12)},
+                                 n_windows=10, within_noise=0.2, seed=0)
+    result = subject_blocked_permutation_test(df, "value", "group", "subject_id",
+                                              n_permutations=2000, seed=0)
+    assert result.method == "permutation_test_subject_blocked_paired"
+    assert result.n_a == result.n_b == 12
+
+
+def test_subject_blocked_paired_recovers_known_within_subject_effect():
+    """A consistent per-subject B>A shift, even with large between-subject
+    baseline variance the paired design removes, must be detected."""
+    df = _make_within_subject_df({f"s{i}": 0.8 for i in range(15)},
+                                 n_windows=12, within_noise=0.2, seed=1)
+    result = subject_blocked_permutation_test(df, "value", "group", "subject_id",
+                                              n_permutations=5000, seed=0)
+    assert result.p_value < 0.05
+    # convention: statistic ~ g_a - g_b = A - B, so a B>A effect is negative
+    assert result.observed_stat < 0
+
+
+def test_subject_blocked_paired_correctly_rejects_within_subject_null():
+    df = _make_within_subject_df({f"s{i}": 0.0 for i in range(15)},
+                                 n_windows=12, within_noise=0.2, seed=2)
+    result = subject_blocked_permutation_test(df, "value", "group", "subject_id",
+                                              n_permutations=5000, seed=0)
+    assert result.p_value > 0.05
+
+
+def test_subject_blocked_paired_pairs_out_between_subject_variance():
+    """The decisive property: a real within-subject effect swamped by huge
+    between-subject baseline variance. The paired test must still find it
+    (it differences the baseline away); an unpaired test on the same subject
+    means would be drowned out. This is the within-subject analogue of the
+    pseudoreplication regression test above."""
+    rng = np.random.default_rng(9)
+    rows = []
+    for i in range(14):
+        base = rng.normal(0, 5.0)  # enormous between-subject spread
+        for group, level in (("A", 0.0), ("B", 0.5)):  # small but consistent B>A
+            for _w in range(10):
+                rows.append({"subject_id": f"s{i}", "group": group,
+                             "value": base + level + rng.normal(0, 0.2)})
+    df = pd.DataFrame(rows)
+    paired = subject_blocked_permutation_test(df, "value", "group", "subject_id",
+                                              n_permutations=5000, seed=0)
+    assert paired.method == "permutation_test_subject_blocked_paired"
+    assert paired.p_value < 0.05, "paired test failed to recover an effect it should pair out baseline variance to see"
+
+
+def test_subject_blocked_paired_handles_all_nan_cell():
+    """Regression test: a subject whose every window in one condition is NaN
+    (e.g. all skipped by the OSError/out-of-range skip path) must not crash
+    the paired test with a phantom 'present in both groups' subject that
+    pivot_table then drops. It should simply be excluded from the paired set."""
+    rows = []
+    for i in range(10):
+        for group, level in (("A", 0.0), ("B", 0.6)):
+            for _w in range(8):
+                rows.append({"subject_id": f"s{i}", "group": group,
+                             "value": level + np.random.default_rng(i).normal(0, 0.2)})
+    # one extra subject whose condition-B windows are ALL NaN
+    for _w in range(8):
+        rows.append({"subject_id": "s_bad", "group": "A", "value": 0.1})
+        rows.append({"subject_id": "s_bad", "group": "B", "value": float("nan")})
+    df = pd.DataFrame(rows)
+    result = subject_blocked_permutation_test(df, "value", "group", "subject_id",
+                                              n_permutations=2000, seed=0)
+    assert result.method == "permutation_test_subject_blocked_paired"
+    assert result.n_a == 10  # s_bad excluded, 10 clean paired subjects remain
+
+
+# ---------------------------------------------------------------------------
 # THE key regression test: pseudoreplication (the exact ds001787 bug class)
 # ---------------------------------------------------------------------------
 

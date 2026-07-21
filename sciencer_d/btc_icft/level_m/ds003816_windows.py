@@ -1,11 +1,12 @@
-"""ds003969 (meditation vs thinking EEG) Level M window scaffold.
+"""ds003816 (loving-kindness meditation vs resting) Level M window scaffold.
 
-Thin, registry-backed delegation to `generic_windows` -- the Level-M row/result
-dataclasses, metric helpers, contrast-evaluation, and output-writing that this
-module used to duplicate now live in ONE place (see generic_windows.py) and are
-driven by this dataset's registry config. Public names are preserved so existing
-imports keep working; output is byte-identical (proven in
-tests/btc_icft/test_onboarding_registry.py).
+Thin, registry-backed delegation to `generic_windows` (see that module and
+ds003969_windows.py for the consolidation rationale). Public names preserved;
+output byte-identical (proven in tests/btc_icft/test_onboarding_registry.py).
+
+Real BIDS task labels (confirmed via S3, not guessed) live in the registry:
+LKMSelf/LKMOther -> meditation, PreResting/PostResting -> resting;
+VisualizeSelf/VisualizeOther intentionally unmapped.
 """
 from __future__ import annotations
 
@@ -19,10 +20,10 @@ from sciencer_d.btc_icft.level_m.generic_windows import (  # noqa: F401  (re-exp
 from sciencer_d.btc_icft.level_m import generic_windows as _G
 from sciencer_d.btc_icft.report_guardrails import BANNED_REPORT_PHRASES, validate_safe_text  # noqa: F401  (re-exported public API)
 
-_CONFIG = get_dataset_config("ds003969")
+_CONFIG = get_dataset_config("ds003816")
 
 
-def evaluate_level_m_windows(rows: list[LevelMWindowRow], task: str = "meditation_vs_thinking") -> LevelMRealWindowResult:
+def evaluate_level_m_windows(rows: list[LevelMWindowRow], task: str = "lkm_vs_resting") -> LevelMRealWindowResult:
     return _G.evaluate_level_m_windows(rows, _CONFIG, task=task)
 
 
