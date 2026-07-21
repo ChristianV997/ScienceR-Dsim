@@ -68,7 +68,7 @@ def test_event_error_field_present_when_set():
 
 
 def test_pipeline_stages_count():
-    assert len(PIPELINE_STAGES) == 8
+    assert len(PIPELINE_STAGES) == 9
 
 
 def test_canonical_json_sorted():

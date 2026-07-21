@@ -1,4 +1,4 @@
-"""Orchestrator v0.1 — 8-stage dry-run pipeline.
+"""Orchestrator v0.1 — 9-stage dry-run pipeline.
 
 All outputs are deterministic in dry-run mode.
 No network or LLM calls required for dry_run=True.
@@ -108,6 +108,7 @@ class Orchestrator:
             "propose_hypotheses": self._stage_propose_hypotheses,
             "plan_experiments":   self._stage_plan_experiments,
             "execute":            self._stage_execute,
+            "fable_reasoning":    self._stage_fable_reasoning,
             "validate":           self._stage_validate,
             "digest":             self._stage_digest,
             "draft_report":       self._stage_draft_report,
@@ -244,6 +245,37 @@ class Orchestrator:
                     "status": "not_implemented",
                 })
         return {"results": results, "dry_run": cfg.dry_run}
+
+    def _stage_fable_reasoning(
+        self, run_id: str, cfg: OrchestratorConfig, out_dir: Path,
+        ctx: Dict[str, Any], *, _now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Fable 5-powered metric interpretation over the execute stage's results.
+
+        `llm_reasoning.fable_interpreter.FableInterpreter` makes a real
+        Anthropic API call, which would violate this orchestrator's
+        dry_run=True contract ("No network or LLM calls required"). Mirrors
+        `_stage_execute`'s dry_run/live split: a deterministic stub in
+        dry_run (what every current caller/test exercises), "not_implemented"
+        live (wiring the real call is a separate feature decision).
+        """
+        results = ctx.get("execute", {}).get("results", [])
+        interpretations = []
+        for r in results:
+            if cfg.dry_run:
+                interpretations.append({
+                    "spec_id": r.get("spec_id"),
+                    "status": "dry_run_stub",
+                    "state": "unclassified",
+                    "confidence": 0.0,
+                    "reasoning": "dry_run stub; no LLM call made",
+                })
+            else:
+                interpretations.append({
+                    "spec_id": r.get("spec_id"),
+                    "status": "not_implemented",
+                })
+        return {"interpretations": interpretations, "dry_run": cfg.dry_run}
 
     def _stage_validate(
         self, run_id: str, cfg: OrchestratorConfig, out_dir: Path,

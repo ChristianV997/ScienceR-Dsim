@@ -63,11 +63,11 @@ Click "Orchestrate Dry Run" in the sidebar.
 curl -s -X POST http://localhost:8000/cmd/orchestrate?dry_run=true | python3 -m json.tool
 ```
 
-Expected: JSON with `run_id`, `stages_completed` (8 stages), `dry_run: true`.
+Expected: JSON with `run_id`, `stages_completed` (9 stages), `dry_run: true`.
 
 Artifacts appear in: `outputs/orchestrator/<run_id>/`
 
-- [ ] Orchestrator ran all 8 stages
+- [ ] Orchestrator ran all 9 stages
 - [ ] `Report.md` exists in the output dir
 - [ ] Orchestrator panel in UI shows stage results
 
