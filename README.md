@@ -1,4 +1,4 @@
-# ScienceR-Dsim
+# Neurotopology Simulator
 
 **A simulator and analysis platform for signed phase-topology (winding charge, vortex defects) in BOLD and EEG brain signals, with persistent homology, cross-modal fusion, and LLM-driven metric interpretation.**
 
