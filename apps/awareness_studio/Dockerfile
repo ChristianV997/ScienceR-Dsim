@@ -11,6 +11,7 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY src/ src/
 COPY tests/ tests/
+COPY tools/ tools/
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -e ".[dev,web]"

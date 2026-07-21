@@ -10,9 +10,16 @@ FROM python:3.11-slim
 # libgomp1: OpenMP runtime needed by scipy/scikit-learn/numba (py-pde) wheels.
 # git: sim/run_cards.py::_git_commit() shells out to `git rev-parse` at
 # runtime to stamp provenance on every RunRecord artifact.
+# make: several tests (tests/btc_icft/test_ds005620_empirical_claim_gate.py,
+# test_ds005620_post_execution_controls.py, test_ds005620_post_execution_payloads_rag.py,
+# test_literature_senses_payloads_rag.py, test_literature_senses_validator.py)
+# shell out to real `make <target>` invocations to generate and validate
+# artifacts, not a mocked subprocess -- without `make` installed they all
+# fail with FileNotFoundError before the target itself ever runs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     git \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
