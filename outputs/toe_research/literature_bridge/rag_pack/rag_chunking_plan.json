@@ -1,0 +1,7 @@
+{
+  "chunks": [
+    "registry_summary",
+    "constraint_matrices",
+    "guardrails"
+  ]
+}

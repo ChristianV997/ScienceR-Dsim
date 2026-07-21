@@ -1,0 +1,131 @@
+# DS005620 Reviewed Contract Activation — P17.1 Configuration
+#
+# This config governs the reviewed contract materializer (P17.1).
+# It defines contract statuses, required inputs, guardrails, and
+# downstream readiness conditions.
+#
+# source_contract_modification_allowed is always false.
+# activation_allowed in output artifact is true ONLY for valid declarations.
+
+dataset_id: DS005620
+pipeline_stage: P17.1
+stage_name: ds005620_reviewed_contract_activation_materializer
+
+# ---- Core guards (never change these) -----------------------------------
+
+source_contract_modification_allowed: false
+auto_benchmark_promotion_allowed: false
+label_inference_allowed: false
+target_fabrication_allowed: false
+p11_auto_run_allowed: false
+
+# ---- Contract status values ---------------------------------------------
+
+contract_statuses:
+  valid: active_reviewed_external_contract
+  invalid: blocked_invalid_declaration
+
+# ---- Required declaration fields ----------------------------------------
+
+required_declaration_fields:
+  - dataset_id
+  - explicit_label_column
+  - positive_values
+  - negative_values
+  - label_scope
+  - join_keys
+  - metadata_provenance
+  - semantic_justification
+  - no_shortcut_inference_confirmation
+  - reviewer_identity_or_role
+  - review_date
+  - both_classes_present_confirmation
+  - ambiguity_reviewed
+
+# ---- Required join keys (all 8 must be present) -------------------------
+
+required_join_keys:
+  - dataset_id
+  - row_id
+  - source_file
+  - window_id
+  - window_start_s
+  - window_end_s
+  - sample_start
+  - sample_end
+
+# ---- Valid label scopes -------------------------------------------------
+
+valid_label_scopes:
+  - window
+  - file
+  - run
+  - subject
+  - session
+
+# ---- No-shortcut confirmation required phrases --------------------------
+
+no_shortcut_required_phrases:
+  - "no sedated-to-no_experience shortcut"
+  - "no unresponsive-to-unconscious shortcut"
+
+# ---- Output files -------------------------------------------------------
+
+output_files:
+  - reviewed_contract.json
+  - p12_external_contract.json
+  - p18_handoff.json
+  - reviewed_activation_report.json
+  - omega_event.json
+  - report.md
+
+# ---- P18 readiness conditions -------------------------------------------
+
+p18_readiness:
+  ready_for_p12_alignment: requires_valid_declaration
+  ready_for_p13_target_injection: requires_valid_declaration
+  ready_for_p11_target_aware_benchmark: requires_valid_declaration
+
+# ---- P18 required external inputs (not provided by P17.1) ---------------
+
+p18_required_inputs:
+  - "real/local DS005620 metadata file (events.tsv or equivalent)"
+  - "readable DS005620 signal windows or MNE extraction outputs (P19.1)"
+  - "P12 alignment output (label_alignment.csv)"
+  - "P13 labeled features (features_m_signal_labeled.csv)"
+  - "P10 topology features (features_t_signal.csv)"
+  - "P11 target-aware benchmark output (metrics_signal_mt.json)"
+
+# ---- Guardrails ---------------------------------------------------------
+
+guardrails:
+  - no_label_inference
+  - no_target_fabrication
+  - no_source_contract_modification
+  - no_automatic_benchmark_run
+  - no_sedated_to_no_experience
+  - no_unresponsive_to_unconscious
+  - no_filename_derived_labels
+  - no_topology_derived_labels
+  - no_artifact_derived_labels
+  - no_p11_gate_modification
+  - no_legacy_mt_real_change
+
+# ---- Forbidden phrases in all outputs -----------------------------------
+
+forbidden_phrases:
+  - "proves consciousness"
+  - "consciousness proven"
+  - "soul proven"
+  - "afterlife proven"
+  - "liberation detected"
+  - "ontology solved"
+  - "ultimate reality"
+  - "q equals self"
+  - "q equals soul"
+  - "q_abs equals suffering"
+  - "f_dress equals karma"
+  - "sedated implies no_experience"
+  - "unresponsive implies unconscious"
+  - "topology proves liberation"
+  - "eeg proves consciousness"

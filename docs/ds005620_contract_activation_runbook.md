@@ -1,4 +1,4 @@
-# DS005620 Label Contract Activation Audit Runbook (P16)
+# DS005620 Human-Reviewed Contract Activation Packet Runbook (P16)
 
 ---
 
@@ -6,121 +6,149 @@
 
 P16 produces a read-only audit of local DS005620 metadata files to determine
 whether enough explicit metadata exists to activate a P12 label contract.
-
-This is **not** a contract activation. It produces a proposal and human-review
-packet. Real activation requires a separate human-reviewed PR.
+It generates a human-review packet listing required decisions and activation
+blockers, so a human reviewer can prepare a separate contract-activation PR.
 
 ---
 
-## Exact command
+## What P16 Does
 
-```bash
-python -m sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation \
-  --ds-root outputs/btc_icft/ds005620 \
-  --out outputs/btc_icft/ds005620_contract_activation
-```
+- Loads local DS005620 metadata (.csv, .tsv, or .json)
+- Audits each column for binary label candidacy
+- Uses P14.1 contract drafts as inactive hints (if supplied)
+- Writes activation_proposal.json with candidate columns and unresolved values
+- Writes human_review_packet.json with required decisions checklist
+- Writes metadata_value_audit.csv with per-column audit details
+- Writes activation_blockers.json
+- Writes omega_event.json with safe claim
+- Writes report.md
 
-With mock fixture (no real data required):
+---
+
+## What P16 Does NOT Do
+
+- Does **not** infer labels from file names, topology, or artifacts
+- Does **not** fabricate y targets
+- Does **not** activate any real contract (`contract_activation_allowed` is always `false`)
+- Does **not** run P11
+- Does **not** modify P11/P12/P13 behavior
+- Does **not** modify legacy DS005620 mt_real semantics
+- Does **not** download data
+- Does **not** use P14.1 contract drafts to activate anything
+
+---
+
+## Exact Mock Command
 
 ```bash
 python -m sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation \
   --mock-fixture \
-  --ds-root outputs/btc_icft/ds005620 \
+  --out outputs/btc_icft/ds005620_contract_activation
+```
+
+Expected result:
+
+```
+[p16] DS005620 contract activation packet complete.
+  n_metadata_rows: 6
+  metadata_file_exists: True
+  candidate_label_columns: ['trial_type', 'condition']
+  positive_values: [] (not declared)
+  negative_values: [] (not declared)
+  contract_activation_allowed: False (always)
+  activation_blockers: 9
+```
+
+---
+
+## Exact Real/Local Metadata Command
+
+```bash
+python -m sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation \
+  --metadata data/DS005620/events.tsv \
+  --contract-drafts outputs/btc_icft/label_contract_drafts/contract_drafts.json \
   --out outputs/btc_icft/ds005620_contract_activation
 ```
 
 ---
 
-## Expected fixture-safe result
+## How to Use Contract Drafts as Hints Only
 
-```
-[p16] DS005620 contract activation audit complete.
-  metadata_file_exists: True
-  candidate_label_column: trial_type
-  observed_values: ['condition_a', 'condition_b']
-  activation_blockers: 1
-  contract_activation_allowed: False (always)
-  is_ready_for_human_review: False
-```
+The `--contract-drafts` flag accepts the P14.1 `contract_drafts.json` output.
+P16 reads the DS005620 draft and extracts `candidate_label_columns` and
+`unresolved_values` **as hints only**. It never:
 
-`contract_activation_allowed` is **always false** from this pipeline.
+- Copies `positive_values` or `negative_values` into the active proposal
+- Activates any contract based on the draft status
+- Downgrades blockers based on draft content
+
+If a draft has a status suggesting activation (e.g., `ready_to_activate`),
+P16 logs a warning and ignores the active-looking status.
 
 ---
 
-## Activation gates
+## Required Human Decisions
 
-All of the following must be true before a real contract PR can be considered:
+Before a real contract-activation PR can be opened, a human reviewer must
+explicitly declare all of the following:
 
-| Gate | Meaning |
+| Decision | Description |
 |---|---|
-| `metadata_file_exists` | A local metadata file (events.tsv etc.) was found and is non-empty |
-| `explicit_label_column_declared` | A human has declared `explicit_label_column` in the PR |
-| `positive_values_declared` | A human has declared `positive_values` |
-| `negative_values_declared` | A human has declared `negative_values` |
-| `label_scope_declared` | A human has declared `label_scope` |
-| `join_keys_declared` | A human has declared `join_keys` |
-| `both_classes_present` | Both pos/neg values appear in local metadata |
-| `ambiguous_values_rejected` | No `n/a`, `unknown`, `none` etc. remain undeclared |
-| `human_review_required` | Always true |
-| `contract_activation_allowed` | **Always false** — set only in a separate PR |
+| `explicit_label_column` | Which column in the metadata contains the label |
+| `positive_values` | Which values map to the positive class |
+| `negative_values` | Which values map to the negative class |
+| `label_scope` | `window`, `file`, `subject`, or `session` |
+| `join_keys` | Composite key fields for aligning metadata to P9 features |
+| `metadata_provenance` | Source and path of the metadata file |
+| `semantic_justification` | Why the mapping is semantically valid |
+| `no_shortcut_confirmation` | Explicit statement that no shortcut inference is used |
 
 ---
 
-## Output artifacts
+## Activation Blockers
 
-Written to `--out` directory:
+The following blockers will always appear in P16 output:
 
-| File | Contents |
-|---|---|
-| `activation_proposal.json` | Gates, candidate column, observed values, blockers |
-| `human_review_packet.json` | Reviewer checklist, required declarations, forbidden shortcuts |
-| `metadata_value_audit.csv` | Per-value audit: count, is_ambiguous, candidate flags |
-| `activation_blockers.json` | Blockers list; `contract_activation_allowed: false` |
-| `omega_event.json` | Safe claim and event record |
-| `report.md` | Human-readable audit report |
+- `explicit_label_column_required` — must be declared by a human
+- `positive_values_required` — must be declared by a human
+- `negative_values_required` — must be declared by a human
+- `both_classes_required` — both classes must appear in local metadata
+- `human_review_required` — human review is always required
+- `semantic_justification_required` — semantic mapping must be justified
+- `no_shortcut_inference_confirmation_required` — must confirm no shortcut
+- `separate_contract_activation_pr_required` — requires a separate PR
 
----
+If no local metadata is found:
 
-## How to inspect outputs
-
-```bash
-cat outputs/btc_icft/ds005620_contract_activation/activation_proposal.json
-cat outputs/btc_icft/ds005620_contract_activation/activation_blockers.json
-cat outputs/btc_icft/ds005620_contract_activation/human_review_packet.json
-```
-
-Key fields in `activation_proposal.json`:
-- `gates` — all gate values
-- `candidate_label_column` — automatically detected column
-- `observed_values` — distinct non-ambiguous values found
-- `ambiguous_values_found` — values like `n/a`, `unknown` that must be addressed
-- `activation_blockers` — human-readable blockers list
-- `is_ready_for_human_review` — true only when metadata_file_exists and no blockers
+- `metadata_required` — supply local metadata file first
 
 ---
 
-## How to activate a real contract
+## Next Step: P17 Contract Activation PR
 
-Real contract activation requires a **separate human-reviewed PR** with all of the
-following explicitly declared:
+After P16 is reviewed and all required human decisions are made, open a
+**separate contract-activation PR** that explicitly declares:
 
-1. `explicit_label_column` — e.g., `"trial_type"`
-2. `positive_values` — e.g., `["awake"]`
-3. `negative_values` — e.g., `["sedated"]`
-4. `label_scope` — `"window"`, `"file"`, `"subject"`, or `"session"`
-5. `join_keys` — composite key field names for row matching
-6. `metadata_provenance` — source of the metadata values
-7. `reason_mapping_is_valid` — semantic justification for the mapping
-8. `reason_no_shortcut_inference` — explicit statement that no shortcut was used
+1. `explicit_label_column` (e.g., `"trial_type"`)
+2. `positive_values` (e.g., `["focus"]`)
+3. `negative_values` (e.g., `["mind_wandering"]`)
+4. `label_scope` (e.g., `"window"`)
+5. `join_keys` (the 8-field composite from P11)
+6. Metadata provenance (file path and source)
+7. Semantic justification (why the mapping is valid)
+8. Confirmation that no shortcut inference was used
 
-Do NOT activate a real contract by passing any flag to this pipeline.
-This pipeline is permanently read-only.
+That PR runs P12 → P13 → P11 target-aware benchmark. This PR (P16)
+only prepares the review packet.
 
 ---
 
 ## Guardrails
 
-The following are forbidden in all P16 artifacts:
+All P16 artifacts are scanned for forbidden phrases. If any are found,
+the pipeline fails before writing outputs.
+
+Forbidden in all P16 outputs:
 
 - proves consciousness
 - consciousness proven
@@ -136,30 +164,30 @@ The following are forbidden in all P16 artifacts:
 - unresponsive implies unconscious
 
 Additionally:
+- `contract_activation_allowed` is hardcoded `false` everywhere
 - No label inference from file names, topology, or artifacts
 - No target fabrication
 - No data download
-- No modification of P11 promotion gates
-- No modification of legacy DS005620 mt_real semantics
 
 ---
 
-## Running tests
+## Running Tests
 
 ```bash
 python -m pytest tests/btc_icft/test_ds005620_contract_activation.py -q
 ```
 
-Expected: all tests pass with no failures.
-
 ---
 
-## Why this is not contract activation
+## Output Artifacts
 
-- P16 only inspects local files — it does not read, parse, or apply any real
-  label contract.
-- `contract_activation_allowed` is hardcoded to `false` in the pipeline and the
-  output artifacts.
-- The human-review packet is a checklist for a future human-reviewed PR, not an
-  automated trigger.
-- No y targets are produced, injected, or passed to any downstream pipeline.
+Written to `--out` directory:
+
+| File | Contents |
+|---|---|
+| `activation_proposal.json` | Gates, candidate columns, unresolved values, blockers |
+| `human_review_packet.json` | Reviewer checklist, required decisions, reviewer questions |
+| `metadata_value_audit.csv` | Per-column audit: count, unique values, binary_candidate flag |
+| `activation_blockers.json` | Blockers list; `contract_activation_allowed: false` |
+| `omega_event.json` | Safe claim and event record |
+| `report.md` | Human-readable activation audit report |

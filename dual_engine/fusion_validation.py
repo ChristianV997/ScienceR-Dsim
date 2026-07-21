@@ -68,10 +68,14 @@ class FusionValidator:
         Returns:
             null_embeddings: (n_samples, latent_dim) phase-randomized
         """
-        if seed is not None:
-            np.random.seed(seed)
+        rng = np.random.default_rng(seed)
 
         null_embeddings = np.zeros_like(embeddings)
+        n = embeddings.shape[0]
+        # Number of independent positive-frequency bins (excludes DC, and
+        # excludes the Nyquist bin for even n -- both must stay real-valued,
+        # i.e. phase 0, for the inverse transform to come out real).
+        half = (n - 1) // 2
 
         for dim in range(embeddings.shape[1]):
             signal = embeddings[:, dim]
@@ -80,9 +84,17 @@ class FusionValidator:
             fft_signal = np.fft.fft(signal)
             magnitude = np.abs(fft_signal)
 
-            # Randomize phase
-            phase = np.angle(fft_signal)
-            random_phase = np.random.uniform(0, 2 * np.pi, len(phase))
+            # Randomize phase, preserving Hermitian symmetry (phase[k] =
+            # -phase[n-k]) so the reconstructed signal is real AND its FFT
+            # magnitude spectrum is exactly `magnitude` again. Randomizing
+            # every bin independently (the prior implementation) breaks that
+            # symmetry, so np.real(ifft(...)) discards an imaginary residual
+            # and the resulting magnitude spectrum silently drifts from the
+            # original -- the null was not actually magnitude-preserving.
+            random_phase = np.zeros(n)
+            free_phase = rng.uniform(0, 2 * np.pi, half)
+            random_phase[1:half + 1] = free_phase
+            random_phase[n - half:n] = -free_phase[::-1]
 
             # Reconstruct
             fft_randomized = magnitude * np.exp(1j * random_phase)

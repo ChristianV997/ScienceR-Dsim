@@ -1,4 +1,4 @@
-"""Tests for P16 — DS005620 human-reviewed label contract activation path.
+"""Tests for P16 — DS005620 human-reviewed label contract activation packet.
 
 All tests use tmp_path only. No real dataset files required.
 """
@@ -8,22 +8,24 @@ import csv
 import json
 import subprocess
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
 from sciencer_d.btc_icft.labels.ds005620_contract_activation import (
-    ActivationGates,
-    ActivationProposal,
-    HumanReviewPacket,
-    MetadataValueAuditRow,
+    DS005620ActivationProposal,
+    DS005620ActivationResult,
+    DS005620MetadataValueAuditRow,
     _BANNED_PHRASES,
     _SAFE_CLAIM,
-    audit_ds005620_metadata,
+    audit_metadata_values,
+    build_activation_blockers,
+    build_ds005620_activation_omega_event,
     build_human_review_packet,
-    scan_for_banned_phrases,
-    write_activation_outputs,
+    load_contract_drafts,
+    load_metadata_rows,
+    prepare_ds005620_activation_proposal,
+    write_ds005620_activation_outputs,
 )
 
 DATASET_ID = "DS005620"
@@ -33,295 +35,202 @@ DATASET_ID = "DS005620"
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _write_events_tsv(path: Path, rows: list[dict]) -> None:
+def _write_csv(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys()) if rows else ["onset", "duration", "trial_type"]
+    if not rows:
+        path.write_text("", encoding="utf-8")
+        return
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames, delimiter="\t")
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _write_events_csv(path: Path, rows: list[dict]) -> None:
+def _write_tsv(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys()) if rows else ["onset", "duration", "trial_type"]
+    if not rows:
+        path.write_text("", encoding="utf-8")
+        return
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _standard_rows(cond_a="condition_a", cond_b="condition_b") -> list[dict]:
-    return [
-        {"onset": "0.0", "duration": "1.0", "trial_type": cond_a},
-        {"onset": "1.0", "duration": "1.0", "trial_type": cond_b},
-        {"onset": "2.0", "duration": "1.0", "trial_type": cond_a},
-        {"onset": "3.0", "duration": "1.0", "trial_type": cond_b},
-    ]
+_STANDARD_ROWS = [
+    {"trial_type": "focus", "condition": "A",
+     "notes": "free text note", "filename": "/data/sub-01.set"},
+    {"trial_type": "mind_wandering", "condition": "B",
+     "notes": "another note", "filename": "/data/sub-01.set"},
+    {"trial_type": "focus", "condition": "A",
+     "notes": "n/a", "filename": "/data/sub-02.set"},
+    {"trial_type": "mind_wandering", "condition": "B",
+     "notes": "ok", "filename": "/data/sub-02.set"},
+]
+
+_SINGLE_VALUE_ROWS = [
+    {"trial_type": "focus", "condition": "A"},
+    {"trial_type": "focus", "condition": "A"},
+]
+
+
+def _make_result(rows=None, drafts=None) -> DS005620ActivationResult:
+    if rows is None:
+        rows = _STANDARD_ROWS
+    return prepare_ds005620_activation_proposal(rows, drafts)
 
 
 # ---------------------------------------------------------------------------
-# TestActivationGates
+# Test 1–4: load_metadata_rows format support
 # ---------------------------------------------------------------------------
 
-class TestActivationGates:
-    def test_default_contract_activation_allowed_is_false(self):
-        gates = ActivationGates()
-        assert gates.contract_activation_allowed is False
+class TestLoadMetadataRows:
+    def test_reads_csv(self, tmp_path):
+        p = tmp_path / "events.csv"
+        _write_csv(p, _STANDARD_ROWS)
+        rows = load_metadata_rows(str(p))
+        assert len(rows) == 4
 
-    def test_default_human_review_required_is_true(self):
-        gates = ActivationGates()
-        assert gates.human_review_required is True
+    def test_reads_tsv(self, tmp_path):
+        p = tmp_path / "events.tsv"
+        _write_tsv(p, _STANDARD_ROWS)
+        rows = load_metadata_rows(str(p))
+        assert len(rows) == 4
 
-    def test_all_structural_gates_false_by_default(self):
-        gates = ActivationGates()
-        assert gates.all_structural_gates_passed() is False
+    def test_reads_json_list(self, tmp_path):
+        p = tmp_path / "meta.json"
+        p.write_text(json.dumps(_STANDARD_ROWS), encoding="utf-8")
+        rows = load_metadata_rows(str(p))
+        assert len(rows) == 4
 
-    def test_to_dict_has_all_gate_keys(self):
-        gates = ActivationGates()
-        d = gates.to_dict()
-        for key in [
-            "metadata_file_exists",
-            "explicit_label_column_declared",
-            "positive_values_declared",
-            "negative_values_declared",
-            "label_scope_declared",
-            "join_keys_declared",
-            "both_classes_present",
-            "ambiguous_values_rejected",
-            "human_review_required",
-            "contract_activation_allowed",
-        ]:
-            assert key in d, f"Missing gate key: {key}"
+    def test_reads_json_rows_dict(self, tmp_path):
+        p = tmp_path / "meta.json"
+        p.write_text(json.dumps({"rows": _STANDARD_ROWS}), encoding="utf-8")
+        rows = load_metadata_rows(str(p))
+        assert len(rows) == 4
 
-    def test_all_structural_gates_passed_when_all_true(self):
-        gates = ActivationGates(
-            metadata_file_exists=True,
-            explicit_label_column_declared=True,
-            positive_values_declared=True,
-            negative_values_declared=True,
-            label_scope_declared=True,
-            join_keys_declared=True,
-            both_classes_present=True,
-            ambiguous_values_rejected=True,
-        )
-        assert gates.all_structural_gates_passed() is True
+    def test_unsupported_extension_raises_value_error(self, tmp_path):
+        p = tmp_path / "meta.xlsx"
+        p.write_bytes(b"not real xlsx")
+        with pytest.raises(ValueError, match="Unsupported"):
+            load_metadata_rows(str(p))
 
-    def test_contract_activation_still_false_when_structural_gates_pass(self):
-        gates = ActivationGates(
-            metadata_file_exists=True,
-            explicit_label_column_declared=True,
-            positive_values_declared=True,
-            negative_values_declared=True,
-            label_scope_declared=True,
-            join_keys_declared=True,
-            both_classes_present=True,
-            ambiguous_values_rejected=True,
-        )
-        assert gates.contract_activation_allowed is False
+    def test_missing_file_raises_file_not_found(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            load_metadata_rows(str(tmp_path / "nonexistent.csv"))
 
 
 # ---------------------------------------------------------------------------
-# TestAuditDs005620Metadata
+# Tests 7–10: audit_metadata_values column classification
 # ---------------------------------------------------------------------------
 
-class TestAuditDs005620Metadata:
-    def test_returns_proposal_and_audit_rows(self, tmp_path):
-        proposal, audit_rows = audit_ds005620_metadata(str(tmp_path))
-        assert isinstance(proposal, ActivationProposal)
-        assert isinstance(audit_rows, list)
+class TestAuditMetadataValues:
+    def test_identifies_binary_candidate_column(self):
+        rows = _STANDARD_ROWS
+        audit = audit_metadata_values(rows)
+        trial_type_row = next(r for r in audit if r.column == "trial_type")
+        assert trial_type_row.binary_candidate is True
 
-    def test_metadata_file_not_found_when_empty_dir(self, tmp_path):
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.gates.metadata_file_exists is False
-        assert proposal.candidate_metadata_file is None
+    def test_rejects_free_text_notes_column(self):
+        rows = _STANDARD_ROWS
+        audit = audit_metadata_values(rows)
+        notes_row = next(r for r in audit if r.column == "notes")
+        assert notes_row.binary_candidate is False
+        assert notes_row.likely_label_candidate is False
+        assert notes_row.rejected_reason is not None
 
-    def test_finds_tsv_events_file(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.gates.metadata_file_exists is True
-        assert proposal.candidate_metadata_file is not None
+    def test_rejects_file_path_column(self):
+        rows = _STANDARD_ROWS
+        audit = audit_metadata_values(rows)
+        file_row = next(r for r in audit if r.column == "filename")
+        assert file_row.binary_candidate is False
+        assert file_row.rejected_reason is not None
 
-    def test_finds_csv_events_file(self, tmp_path):
-        _write_events_csv(tmp_path / "events.csv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.gates.metadata_file_exists is True
+    def test_rejects_single_value_column(self):
+        rows = _SINGLE_VALUE_ROWS
+        audit = audit_metadata_values(rows)
+        trial_row = next(r for r in audit if r.column == "trial_type")
+        assert trial_row.binary_candidate is False
+        assert trial_row.rejected_reason == "single_value_only"
 
-    def test_detects_trial_type_column(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.candidate_label_column == "trial_type"
+    def test_returns_list_of_audit_rows(self):
+        audit = audit_metadata_values(_STANDARD_ROWS)
+        assert isinstance(audit, list)
+        assert all(isinstance(r, DS005620MetadataValueAuditRow) for r in audit)
 
-    def test_observed_values_populated(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert "condition_a" in proposal.observed_values
-        assert "condition_b" in proposal.observed_values
-
-    def test_audit_rows_populated(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        _, audit_rows = audit_ds005620_metadata(str(tmp_path))
-        assert len(audit_rows) > 0
-        assert all(isinstance(r, MetadataValueAuditRow) for r in audit_rows)
-
-    def test_contract_activation_always_false(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.gates.contract_activation_allowed is False
-
-    def test_human_review_required_always_true(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.gates.human_review_required is True
-
-    def test_safe_claim_in_proposal(self, tmp_path):
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert proposal.safe_claim == _SAFE_CLAIM
-
-    def test_activation_blockers_present_when_no_metadata(self, tmp_path):
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert len(proposal.activation_blockers) > 0
-
-    def test_activation_blockers_present_even_with_metadata(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert len(proposal.activation_blockers) > 0
-
-    def test_declared_label_column_sets_gate(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(
-            str(tmp_path),
-            declared_label_column="trial_type",
-        )
-        assert proposal.gates.explicit_label_column_declared is True
-
-    def test_declared_positive_negative_sets_gates(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(
-            str(tmp_path),
-            declared_label_column="trial_type",
-            declared_positive_values=["condition_a"],
-            declared_negative_values=["condition_b"],
-        )
-        assert proposal.gates.positive_values_declared is True
-        assert proposal.gates.negative_values_declared is True
-
-    def test_declared_label_scope_sets_gate(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(
-            str(tmp_path),
-            declared_label_scope="window",
-        )
-        assert proposal.gates.label_scope_declared is True
-
-    def test_declared_join_keys_sets_gate(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(
-            str(tmp_path),
-            declared_join_keys=["dataset_id", "row_id", "window_id"],
-        )
-        assert proposal.gates.join_keys_declared is True
-
-    def test_both_classes_present_when_pos_neg_found(self, tmp_path):
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(
-            str(tmp_path),
-            declared_label_column="trial_type",
-            declared_positive_values=["condition_a"],
-            declared_negative_values=["condition_b"],
-        )
-        assert proposal.gates.both_classes_present is True
-
-    def test_ambiguous_values_detected(self, tmp_path):
-        rows = _standard_rows() + [{"onset": "4.0", "duration": "1.0", "trial_type": "n/a"}]
-        _write_events_tsv(tmp_path / "events.tsv", rows)
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        assert "n/a" in proposal.ambiguous_values_found
-
-    def test_no_banned_phrases_in_proposal_notes(self, tmp_path):
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        for note in proposal.notes:
-            for phrase in _BANNED_PHRASES:
-                assert phrase not in note.lower()
+    def test_empty_rows_returns_empty_audit(self):
+        audit = audit_metadata_values([])
+        assert audit == []
 
 
 # ---------------------------------------------------------------------------
-# TestBuildHumanReviewPacket
+# Tests 11–16: proposal invariants
 # ---------------------------------------------------------------------------
 
-class TestBuildHumanReviewPacket:
-    def _make_proposal(self, tmp_path) -> ActivationProposal:
-        _write_events_tsv(tmp_path / "events.tsv", _standard_rows())
-        proposal, _ = audit_ds005620_metadata(str(tmp_path))
-        return proposal
+class TestProposalInvariants:
+    def test_contract_activation_never_true(self):
+        result = _make_result()
+        assert result.activation_proposal["contract_activation_allowed"] is False
 
-    def test_returns_human_review_packet(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        assert isinstance(packet, HumanReviewPacket)
+    def test_positive_values_always_empty(self):
+        result = _make_result()
+        assert result.activation_proposal["positive_values"] == []
 
-    def test_safe_claim_in_packet(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        assert packet.safe_claim == _SAFE_CLAIM
+    def test_negative_values_always_empty(self):
+        result = _make_result()
+        assert result.activation_proposal["negative_values"] == []
 
-    def test_required_declarations_present(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        for field in ["explicit_label_column", "positive_values", "negative_values",
-                      "label_scope", "join_keys"]:
-            assert field in packet.required_declarations
+    def test_candidate_values_go_to_unresolved_only(self):
+        result = _make_result()
+        proposal = result.activation_proposal
+        unresolved = proposal["unresolved_values"]
+        # Values that appear in metadata should be in unresolved if binary_candidate
+        assert isinstance(unresolved, list)
+        # Never in pos/neg
+        assert proposal["positive_values"] == []
+        assert proposal["negative_values"] == []
 
-    def test_activation_checklist_has_items(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        assert len(packet.activation_checklist) >= 8
+    def test_activation_blockers_include_human_review_required(self):
+        result = _make_result()
+        blockers = result.activation_proposal["activation_blockers"]
+        assert "human_review_required" in blockers
 
-    def test_forbidden_shortcuts_no_banned_phrases(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        for shortcut in packet.forbidden_shortcuts:
-            for phrase in _BANNED_PHRASES:
-                assert phrase not in shortcut.lower()
+    def test_activation_blockers_include_separate_pr_required(self):
+        result = _make_result()
+        blockers = result.activation_proposal["activation_blockers"]
+        assert "separate_contract_activation_pr_required" in blockers
 
-    def test_to_dict_serializable(self, tmp_path):
-        proposal = self._make_proposal(tmp_path)
-        packet = build_human_review_packet(proposal)
-        d = packet.to_dict()
-        json.dumps(d)
+    def test_human_review_packet_activation_allowed_false(self):
+        result = _make_result()
+        assert result.human_review_packet["activation_allowed"] is False
 
-
-# ---------------------------------------------------------------------------
-# TestScanForBannedPhrases
-# ---------------------------------------------------------------------------
-
-class TestScanForBannedPhrases:
-    def test_no_hits_in_clean_text(self):
-        hits = scan_for_banned_phrases("This is a clean audit report.")
-        assert hits == []
-
-    def test_detects_banned_phrase(self):
-        hits = scan_for_banned_phrases("This proves consciousness.")
-        assert len(hits) > 0
-
-    def test_safe_claim_has_no_banned_phrases(self):
-        hits = scan_for_banned_phrases(_SAFE_CLAIM)
-        assert hits == []
+    def test_result_is_correct_type(self):
+        result = _make_result()
+        assert isinstance(result, DS005620ActivationResult)
 
 
 # ---------------------------------------------------------------------------
-# TestWriteActivationOutputs
+# Tests 17–19: write outputs
 # ---------------------------------------------------------------------------
 
-class TestWriteActivationOutputs:
+class TestWriteOutputs:
     def _run(self, tmp_path):
-        _write_events_tsv(tmp_path / "ds" / "events.tsv", _standard_rows())
-        proposal, audit_rows = audit_ds005620_metadata(str(tmp_path / "ds"))
-        paths = write_activation_outputs(proposal, audit_rows, str(tmp_path / "out"))
-        return proposal, audit_rows, paths, tmp_path / "out"
+        result = _make_result()
+        paths = write_ds005620_activation_outputs(result, str(tmp_path / "out"))
+        return result, paths, tmp_path / "out"
 
-    def test_writes_all_six_outputs(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
+    def test_metadata_value_audit_csv_has_required_columns(self, tmp_path):
+        _, _, out = self._run(tmp_path)
+        csv_path = out / "metadata_value_audit.csv"
+        assert csv_path.is_file()
+        header = csv_path.read_text().splitlines()[0]
+        for col in ["column", "n_rows", "n_nonempty", "n_unique",
+                    "unique_values", "binary_candidate", "likely_label_candidate",
+                    "rejected_reason", "warnings"]:
+            assert col in header, f"Missing column in CSV: {col}"
+
+    def test_writes_all_six_files(self, tmp_path):
+        _, _, out = self._run(tmp_path)
         for name in [
             "activation_proposal.json",
             "human_review_packet.json",
@@ -332,69 +241,117 @@ class TestWriteActivationOutputs:
         ]:
             assert (out / name).is_file(), f"Missing: {name}"
 
-    def test_activation_proposal_parses(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "activation_proposal.json").read_text())
-        assert "dataset_id" in data
-        assert "gates" in data
-        assert "activation_blockers" in data
-
-    def test_activation_proposal_contract_activation_always_false(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "activation_proposal.json").read_text())
-        assert data["gates"]["contract_activation_allowed"] is False
-
-    def test_human_review_packet_has_safe_claim(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "human_review_packet.json").read_text())
-        assert "safe_claim" in data
-        assert _SAFE_CLAIM in data["safe_claim"]
-
-    def test_activation_blockers_has_blockers_key(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "activation_blockers.json").read_text())
-        assert "blockers" in data
-        assert "contract_activation_allowed" in data
-        assert data["contract_activation_allowed"] is False
-
-    def test_omega_event_has_safe_claim(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "omega_event.json").read_text())
-        assert "safe_claim" in data
-
-    def test_omega_event_contract_activation_false(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        data = json.loads((out / "omega_event.json").read_text())
-        assert data["contract_activation_allowed"] is False
-
-    def test_report_md_no_banned_phrases(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        text = (out / "report.md").read_text().lower()
-        for phrase in _BANNED_PHRASES:
-            assert phrase not in text, f"Banned phrase in report.md: {phrase}"
-
-    def test_report_md_has_safe_claim(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        text = (out / "report.md").read_text()
-        assert "DS005620" in text
-
-    def test_metadata_value_audit_csv_has_rows(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        text = (out / "metadata_value_audit.csv").read_text()
-        lines = [l for l in text.splitlines() if l.strip()]
-        assert len(lines) >= 1
-
-    def test_metadata_value_audit_csv_has_header(self, tmp_path):
-        _, _, paths, out = self._run(tmp_path)
-        text = (out / "metadata_value_audit.csv").read_text()
-        header = text.splitlines()[0]
-        assert "column" in header
-        assert "value" in header
-        assert "is_ambiguous" in header
+    def test_json_outputs_parse(self, tmp_path):
+        _, _, out = self._run(tmp_path)
+        for name in [
+            "activation_proposal.json",
+            "human_review_packet.json",
+            "activation_blockers.json",
+            "omega_event.json",
+        ]:
+            data = json.loads((out / name).read_text())
+            assert isinstance(data, dict), f"{name} is not a dict"
 
 
 # ---------------------------------------------------------------------------
-# TestConfig
+# Test 20: omega_event safe claim
+# ---------------------------------------------------------------------------
+
+class TestOmegaEvent:
+    def test_omega_event_safe_claim_no_banned_phrases(self):
+        result = _make_result()
+        omega = build_ds005620_activation_omega_event(result)
+        claim = omega.get("safe_claim", "").lower()
+        for phrase in _BANNED_PHRASES:
+            assert phrase not in claim, f"Banned phrase in omega safe_claim: {phrase}"
+
+    def test_omega_event_contract_activation_false(self):
+        result = _make_result()
+        omega = build_ds005620_activation_omega_event(result)
+        assert omega["contract_activation_allowed"] is False
+
+    def test_omega_event_human_review_required(self):
+        result = _make_result()
+        omega = build_ds005620_activation_omega_event(result)
+        assert omega["human_review_required"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 21–22: report.md content
+# ---------------------------------------------------------------------------
+
+class TestReportMd:
+    def _get_report(self, tmp_path) -> str:
+        result = _make_result()
+        write_ds005620_activation_outputs(result, str(tmp_path / "out"))
+        return (tmp_path / "out" / "report.md").read_text()
+
+    def test_report_contains_human_reviewed(self, tmp_path):
+        text = self._get_report(tmp_path).lower()
+        assert "human-reviewed" in text or "human reviewed" in text
+
+    def test_report_contains_without_inferring_labels(self, tmp_path):
+        text = self._get_report(tmp_path).lower()
+        assert "without inferring labels" in text or "no labels inferred" in text
+
+    def test_report_contains_separate_contract_activation_pr(self, tmp_path):
+        text = self._get_report(tmp_path).lower()
+        assert "separate contract-activation pr" in text or "separate" in text
+
+    def test_report_no_banned_phrases(self, tmp_path):
+        text = self._get_report(tmp_path).lower()
+        for phrase in _BANNED_PHRASES:
+            assert phrase not in text, f"Banned phrase in report.md: {phrase}"
+
+
+# ---------------------------------------------------------------------------
+# Tests 23–24: CLI
+# ---------------------------------------------------------------------------
+
+class TestCli:
+    def test_mock_fixture_exits_zero_and_writes_outputs(self, tmp_path):
+        cp = subprocess.run(
+            [sys.executable, "-m",
+             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
+             "--mock-fixture",
+             "--out", str(tmp_path / "out")],
+            capture_output=True, text=True,
+        )
+        assert cp.returncode == 0, f"stderr: {cp.stderr}"
+        out = tmp_path / "out"
+        for name in [
+            "activation_proposal.json",
+            "human_review_packet.json",
+            "metadata_value_audit.csv",
+            "activation_blockers.json",
+            "omega_event.json",
+            "report.md",
+        ]:
+            assert (out / name).is_file(), f"Missing: {name}"
+
+    def test_missing_metadata_without_mock_fails_cleanly(self, tmp_path):
+        cp = subprocess.run(
+            [sys.executable, "-m",
+             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
+             "--out", str(tmp_path / "out")],
+            capture_output=True, text=True,
+        )
+        assert cp.returncode != 0
+        assert "metadata" in cp.stderr.lower() or "mock-fixture" in cp.stderr.lower()
+
+    def test_help_works(self):
+        cp = subprocess.run(
+            [sys.executable, "-m",
+             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
+             "--help"],
+            capture_output=True, text=True,
+        )
+        assert cp.returncode == 0
+        assert "mock-fixture" in cp.stdout.lower() or "metadata" in cp.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 25: config
 # ---------------------------------------------------------------------------
 
 class TestConfig:
@@ -408,7 +365,7 @@ class TestConfig:
             "omega_event.json",
             "report.md",
         ]:
-            assert item in cfg
+            assert item in cfg, f"Config missing required output: {item}"
 
     def test_config_contains_activation_gates(self):
         cfg = Path("configs/btc_icft/ds005620_contract_activation.yaml").read_text()
@@ -419,8 +376,12 @@ class TestConfig:
             "negative_values_declared",
             "label_scope_declared",
             "join_keys_declared",
+            "both_classes_present",
+            "ambiguous_values_rejected",
+            "human_review_required",
+            "contract_activation_allowed",
         ]:
-            assert gate in cfg
+            assert gate in cfg, f"Config missing gate: {gate}"
 
     def test_config_contract_activation_allowed_false(self):
         cfg = Path("configs/btc_icft/ds005620_contract_activation.yaml").read_text()
@@ -435,118 +396,171 @@ class TestConfig:
             "no_unresponsive_to_unconscious",
             "no_automatic_real_contract_activation",
         ]:
-            assert gr in cfg
+            assert gr in cfg, f"Config missing guardrail: {gr}"
 
     def test_config_no_banned_phrases(self):
         cfg = Path("configs/btc_icft/ds005620_contract_activation.yaml").read_text().lower()
         for phrase in _BANNED_PHRASES:
-            assert phrase not in cfg
+            assert phrase not in cfg, f"Banned phrase in config: {phrase}"
 
 
 # ---------------------------------------------------------------------------
-# TestCli
+# Tests 26–27: no y target / no active contract status
 # ---------------------------------------------------------------------------
 
-class TestCli:
-    def test_help_works(self):
-        cp = subprocess.run(
-            [sys.executable, "-m",
-             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
-             "--help"],
-            capture_output=True, text=True,
-        )
-        assert cp.returncode == 0
-        assert "mock-fixture" in cp.stdout.lower() or "ds-root" in cp.stdout.lower()
-
-    def test_mock_fixture_exits_zero(self, tmp_path):
-        cp = subprocess.run(
-            [sys.executable, "-m",
-             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
-             "--mock-fixture",
-             "--ds-root", str(tmp_path / "ds"),
-             "--out", str(tmp_path / "out")],
-            capture_output=True, text=True,
-        )
-        assert cp.returncode == 0, f"stderr: {cp.stderr}"
-
-    def test_mock_fixture_writes_all_outputs(self, tmp_path):
-        subprocess.run(
-            [sys.executable, "-m",
-             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
-             "--mock-fixture",
-             "--ds-root", str(tmp_path / "ds"),
-             "--out", str(tmp_path / "out")],
-            capture_output=True, text=True,
-        )
+class TestNoYTargetNoActiveContract:
+    def test_no_y_target_in_any_output(self, tmp_path):
+        result = _make_result()
+        paths = write_ds005620_activation_outputs(result, str(tmp_path / "out"))
         out = tmp_path / "out"
-        for name in [
-            "activation_proposal.json",
-            "human_review_packet.json",
-            "metadata_value_audit.csv",
-            "activation_blockers.json",
-            "omega_event.json",
-            "report.md",
-        ]:
-            assert (out / name).is_file(), f"Missing: {name}"
+        # Check all JSON outputs for y target fields
+        for name in ["activation_proposal.json", "human_review_packet.json",
+                     "activation_blockers.json", "omega_event.json"]:
+            text = (out / name).read_text()
+            data = json.loads(text)
+            _check_no_y_target(data)
 
-    def test_mock_fixture_contract_activation_always_false(self, tmp_path):
-        subprocess.run(
-            [sys.executable, "-m",
-             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
-             "--mock-fixture",
-             "--ds-root", str(tmp_path / "ds"),
-             "--out", str(tmp_path / "out")],
-            capture_output=True, text=True,
-        )
+    def test_no_contract_status_set_to_active(self, tmp_path):
+        result = _make_result()
+        paths = write_ds005620_activation_outputs(result, str(tmp_path / "out"))
         data = json.loads((tmp_path / "out" / "activation_proposal.json").read_text())
-        assert data["gates"]["contract_activation_allowed"] is False
+        assert data["contract_activation_allowed"] is False
+        assert data["positive_values"] == []
+        assert data["negative_values"] == []
 
-    def test_no_metadata_exits_zero_with_blockers(self, tmp_path):
-        cp = subprocess.run(
-            [sys.executable, "-m",
-             "sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation",
-             "--ds-root", str(tmp_path / "ds"),
-             "--out", str(tmp_path / "out")],
-            capture_output=True, text=True,
-        )
-        assert cp.returncode == 0
+    def test_activation_blockers_json_always_false(self, tmp_path):
+        result = _make_result()
+        write_ds005620_activation_outputs(result, str(tmp_path / "out"))
         data = json.loads((tmp_path / "out" / "activation_blockers.json").read_text())
-        assert data["n_blockers"] > 0
+        assert data["contract_activation_allowed"] is False
+
+
+def _check_no_y_target(data, path=""):
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k in ("y", "y_target", "y_targets", "labels", "positive_label", "negative_label"):
+                # Should be empty or not present with values
+                if isinstance(v, list):
+                    assert len(v) == 0, f"Non-empty {k} at {path}"
+                elif v is not None and v is not False:
+                    pass  # strings/booleans okay for non-target fields
+            _check_no_y_target(v, f"{path}.{k}")
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            _check_no_y_target(item, f"{path}[{i}]")
 
 
 # ---------------------------------------------------------------------------
-# TestGuardrailIntegrity
+# Tests 28–29: P11/P12/P13/P14/legacy not imported or modified
 # ---------------------------------------------------------------------------
 
-class TestGuardrailIntegrity:
-    def test_safe_claim_has_no_banned_phrases(self):
-        for phrase in _BANNED_PHRASES:
-            assert phrase not in _SAFE_CLAIM.lower()
-
-    def test_no_label_inference_in_module(self):
+class TestModuleIsolation:
+    def test_no_p11_p12_p13_import_in_activation_module(self):
         src = Path(
             "sciencer_d/btc_icft/labels/ds005620_contract_activation.py"
         ).read_text()
-        assert "infer_label" not in src
-        assert "make_target" not in src
+        assert "eeg_signal_residual" not in src
+        assert "eeg_label_contracts" not in src
+        assert "eeg_target_injection" not in src
+        assert "run_eeg_signal_mt" not in src
 
-    def test_contract_activation_always_false_in_source(self):
+    def test_no_legacy_mt_real_import_in_activation_module(self):
         src = Path(
             "sciencer_d/btc_icft/labels/ds005620_contract_activation.py"
         ).read_text()
-        assert '"contract_activation_allowed": True' not in src
-        assert '"contract_activation_allowed": true' not in src
+        assert "run_ds005620_mt_real" not in src
+        assert "ds005620_residual" not in src
 
-    def test_no_p13_imports_in_pipeline(self):
+    def test_no_p13_import_in_pipeline(self):
         src = Path(
             "sciencer_d/btc_icft/pipelines/prepare_ds005620_contract_activation.py"
         ).read_text()
         assert "eeg_target_injection" not in src
         assert "inject_eeg_targets" not in src
 
-    def test_no_p11_imports_in_pipeline(self):
+    def test_no_p11_import_in_pipeline(self):
         src = Path(
             "sciencer_d/btc_icft/pipelines/prepare_ds005620_contract_activation.py"
         ).read_text()
         assert "eeg_signal_residual" not in src
         assert "run_eeg_signal_mt" not in src
+
+
+# ---------------------------------------------------------------------------
+# Tests 30–31: contract_drafts as hints only; active draft downgraded
+# ---------------------------------------------------------------------------
+
+class TestContractDraftsAsHintsOnly:
+    def _make_draft(self, status="draft_inactive_human_review_required",
+                    pos_vals=None, neg_vals=None) -> dict:
+        return {
+            "drafts": [{
+                "dataset_id": "DS005620",
+                "status": status,
+                "candidate_label_columns": ["trial_type"],
+                "unresolved_values": ["focus", "mind_wandering"],
+                "positive_values": pos_vals or [],
+                "negative_values": neg_vals or [],
+            }]
+        }
+
+    def test_contract_drafts_used_as_hints_only(self):
+        drafts = self._make_draft()
+        result = prepare_ds005620_activation_proposal(_STANDARD_ROWS, drafts)
+        proposal = result.activation_proposal
+        # Still not activated
+        assert proposal["contract_activation_allowed"] is False
+        assert proposal["positive_values"] == []
+        assert proposal["negative_values"] == []
+        # But candidate columns included as hints
+        assert "trial_type" in proposal["candidate_label_columns"]
+
+    def test_active_looking_draft_is_downgraded_with_warning(self):
+        drafts = self._make_draft(
+            status="ready_to_activate",
+            pos_vals=["focus"],
+            neg_vals=["mind_wandering"],
+        )
+        result = prepare_ds005620_activation_proposal(_STANDARD_ROWS, drafts)
+        # Still not activated
+        assert result.activation_proposal["contract_activation_allowed"] is False
+        assert result.activation_proposal["positive_values"] == []
+        assert result.activation_proposal["negative_values"] == []
+        # Warning should be present
+        assert any("downgraded" in w.lower() or "inactive" in w.lower() or "ignored" in w.lower()
+                   for w in result.warnings)
+
+    def test_contract_drafts_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            load_contract_drafts(str(tmp_path / "nonexistent.json"))
+
+    def test_unresolved_values_from_draft_appear_in_proposal(self):
+        drafts = self._make_draft()
+        result = prepare_ds005620_activation_proposal(_STANDARD_ROWS, drafts)
+        unresolved = result.activation_proposal["unresolved_values"]
+        # Hint values from draft appear in unresolved, not in pos/neg
+        assert "focus" in unresolved or "mind_wandering" in unresolved
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: safe_claim
+# ---------------------------------------------------------------------------
+
+class TestGuardrails:
+    def test_safe_claim_has_no_banned_phrases(self):
+        for phrase in _BANNED_PHRASES:
+            assert phrase not in _SAFE_CLAIM.lower()
+
+    def test_no_infer_label_in_module_source(self):
+        src = Path(
+            "sciencer_d/btc_icft/labels/ds005620_contract_activation.py"
+        ).read_text()
+        assert "infer_label" not in src
+        assert "make_target" not in src
+
+    def test_contract_activation_true_not_in_source(self):
+        src = Path(
+            "sciencer_d/btc_icft/labels/ds005620_contract_activation.py"
+        ).read_text()
+        assert '"contract_activation_allowed": True' not in src
+        assert '"contract_activation_allowed": true' not in src

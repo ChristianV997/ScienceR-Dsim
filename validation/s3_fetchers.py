@@ -26,7 +26,7 @@ import warnings
 
 try:
     import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
+    from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
     BOTO_AVAILABLE = True
 except ImportError:
     BOTO_AVAILABLE = False
@@ -76,7 +76,7 @@ class NKIRSFetcher:
             self.s3_client = session.client("s3", region_name=region)
             # Test connectivity
             self.s3_client.head_bucket(Bucket=self.bucket)
-        except (NoCredentialsError, ClientError) as exc:
+        except (NoCredentialsError, ClientError, ProfileNotFound) as exc:
             warnings.warn(
                 f"Could not connect to NKI-RS S3 bucket: {exc}. "
                 "NKI-RS is public (CC0), so no credentials are required.",
@@ -278,7 +278,7 @@ class HCPYAFetcher:
             self.s3_client = session.client("s3", region_name=region)
             # Test connectivity
             self.s3_client.head_bucket(Bucket=self.bucket)
-        except (NoCredentialsError, ClientError) as exc:
+        except (NoCredentialsError, ClientError, ProfileNotFound) as exc:
             raise RuntimeError(
                 f"Could not authenticate with HCP-YA bucket. "
                 f"Ensure: (1) AWS credentials are configured for profile '{self.profile}', "
@@ -305,6 +305,9 @@ class HCPYAFetcher:
         str
             S3 object key.
         """
+        if run not in (1, 2, 3, 4):
+            raise ValueError(f"run must be 1-4, got {run}")
+
         prefix = f"HCP_1200/{subject_id}/MNINonLinear/Results/rfMRI_REST{run}_LR"
 
         if dtype == "bold":

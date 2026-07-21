@@ -1,0 +1,237 @@
+{
+  "schema_version": "p22.0",
+  "description": "Multi-dataset real-execution source manifest. Defines per-dataset source hints, local-root candidates, reader expectations, and per-dataset support flags. No automatic downloads, no label inference.",
+  "safe_claim": "P22 generalizes the DS005620 real-execution planning pattern into a registry-driven multi-dataset framework that inspects local readiness, plans artifact preparation, computes next actions, and preserves manual real-data and human-review boundaries.",
+  "dataset_id_casing_note": "dataset_id casing (DS005620/DS002094 uppercase vs ds001787/ds003969/ds003816/PhysioNet_GABA mixed) is intentionally NOT normalized, despite being inconsistent: grepping consumers found 10+ files with hardcoded uppercase 'DS005620'/'DS002094' literals (comparisons, list defaults, path logic), including a legacy-path-preservation special case in sciencer_d/btc_icft/runtime/multi_dataset_paths.py::build_dataset_output_roots that would silently stop matching if this manifest's dataset_id were renamed. A broad rename was judged a real regression risk for a cosmetic issue and was not done.",
+  "datasets": [
+    {
+      "dataset_id": "DS005620",
+      "title": "OpenNeuro meditation EEG study DS005620",
+      "source_hint": "OpenNeuro",
+      "source_url_hint": "https://openneuro.org/datasets/ds005620",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".set", ".vhdr", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/DS005620",
+        "data/ds005620",
+        "inputs/DS005620",
+        "inputs/ds005620"
+      ],
+      "metadata_candidates": [
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv",
+        "participants.tsv",
+        "metadata.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".set", ".vhdr", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": true,
+      "dataset_specific_executor_available": true,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "DS005620 is the first fully supported profile via P18.3/P20/P21. Legacy output paths preserved for backward compatibility.",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    },
+    {
+      "dataset_id": "DS002094",
+      "title": "OpenNeuro EEG study DS002094",
+      "source_hint": "OpenNeuro",
+      "source_url_hint": "https://openneuro.org/datasets/ds002094",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".set", ".vhdr", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/DS002094",
+        "data/ds002094",
+        "inputs/DS002094",
+        "inputs/ds002094"
+      ],
+      "metadata_candidates": [
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv",
+        "participants.tsv",
+        "metadata.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".set", ".vhdr", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": false,
+      "dataset_specific_executor_available": false,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "Generic planning/gating supported. Real benchmark execution requires a dataset-specific executor (not yet implemented).",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    },
+    {
+      "dataset_id": "ds001787",
+      "title": "OpenNeuro meditation EEG dataset ds001787",
+      "source_hint": "OpenNeuro",
+      "source_url_hint": "https://openneuro.org/datasets/ds001787",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".set", ".vhdr", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/ds001787",
+        "data/DS001787",
+        "inputs/ds001787",
+        "inputs/DS001787"
+      ],
+      "metadata_candidates": [
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv",
+        "participants.tsv",
+        "metadata.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".set", ".vhdr", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": false,
+      "dataset_specific_executor_available": false,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "Generic planning/gating supported. A real signal-derived Level M/Level T pipeline now exists outside the P22 promotion framework -- sciencer_d/btc_icft/pipelines/run_ds001787_{m,t}_real.py, sciencer_d/btc_icft/level_m/ds001787_windows{,_real}.py, sciencer_d/btc_icft/level_m/ds001787_behavioral.py (probe-rating parsing + cross-clock alignment), sciencer_d/btc_icft/level_t/ds001787_real_topology.py, streaming runner tools/stream_process_ds001787.py -- verified end-to-end on all 24 real subjects, 0 failures (outputs/btc_icft/ds001787/REPORT_ds001787_expertise_and_depth_topology.md). The dataset_specific_executor_available/real_execution_supported flags stay false here deliberately: tools/validate_multi_dataset_real_execution_matrix.py enforces (test_non_ds005620_executor_unavailable) that only DS005620 may claim executor availability in this framework's gate matrix -- that promotion is a separate, human-reviewed process this session did not run, not a simple engineering-readiness fact. Do not flip these flags without going through that process.",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    },
+    {
+      "dataset_id": "ds003969",
+      "title": "OpenNeuro meditation EEG dataset ds003969",
+      "source_hint": "OpenNeuro",
+      "source_url_hint": "https://openneuro.org/datasets/ds003969",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".set", ".vhdr", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/ds003969",
+        "data/DS003969",
+        "inputs/ds003969",
+        "inputs/DS003969"
+      ],
+      "metadata_candidates": [
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv",
+        "participants.tsv",
+        "metadata.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".set", ".vhdr", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": false,
+      "dataset_specific_executor_available": false,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "Generic planning/gating supported. A real signal-derived Level M/Level T pipeline now exists outside the P22 promotion framework -- sciencer_d/btc_icft/pipelines/run_ds003969_{m,t}_real.py, sciencer_d/btc_icft/level_m/ds003969_windows{,_real}.py, sciencer_d/btc_icft/level_t/ds003969_real_topology.py, streaming runner process_ds003969_subject in tools/stream_process_openneuro_dataset.py -- verified end-to-end on all 98 real subjects, 0 failures (outputs/btc_icft/ds003969/REPORT_ds003969_consciousness_transitions.md). The dataset_specific_executor_available/real_execution_supported flags stay false here deliberately: tools/validate_multi_dataset_real_execution_matrix.py enforces (test_non_ds005620_executor_unavailable) that only DS005620 may claim executor availability in this framework's gate matrix -- that promotion is a separate, human-reviewed process this session did not run, not a simple engineering-readiness fact. Do not flip these flags without going through that process.",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    },
+    {
+      "dataset_id": "ds003816",
+      "title": "OpenNeuro meditation EEG dataset ds003816",
+      "source_hint": "OpenNeuro",
+      "source_url_hint": "https://openneuro.org/datasets/ds003816",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".set", ".vhdr", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/ds003816",
+        "data/DS003816",
+        "inputs/ds003816",
+        "inputs/DS003816"
+      ],
+      "metadata_candidates": [
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv",
+        "participants.tsv",
+        "metadata.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".set", ".vhdr", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": false,
+      "dataset_specific_executor_available": false,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "Generic planning/gating supported. A real signal-derived Level M/Level T pipeline now exists outside the P22 promotion framework -- sciencer_d/btc_icft/pipelines/run_ds003816_{m,t}_real.py, sciencer_d/btc_icft/level_m/ds003816_windows{,_real}.py, sciencer_d/btc_icft/level_t/ds003816_real_topology.py, streaming runner process_ds003816_subject in tools/stream_process_openneuro_dataset.py -- verified end-to-end on all 48 real subjects, 0 failures (outputs/btc_icft/ds003816/REPORT_ds003816_lkm_meditation_topology.md). Loving-kindness meditation vs resting: topology null, classical Level M spectral/complexity features significant (a real instrument dissociation). The dataset_specific_executor_available/real_execution_supported flags stay false here deliberately, exactly as for ds001787/ds003969: tools/validate_multi_dataset_real_execution_matrix.py enforces (test_non_ds005620_executor_unavailable) that only DS005620 may claim executor availability in this framework gate matrix -- that promotion is a separate, human-reviewed process this session did not run, not a simple engineering-readiness fact. Do not flip these flags without going through that process.",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    },
+    {
+      "dataset_id": "PhysioNet_GABA",
+      "title": "PhysioNet GABA EEG study",
+      "source_hint": "PhysioNet",
+      "source_url_hint": "https://physionet.org/",
+      "expected_modality": "EEG",
+      "expected_formats": [".edf", ".bdf", ".fif", ".csv", ".tsv"],
+      "canonical_local_roots": [
+        "data/physionet_gaba",
+        "data/PhysioNet_GABA",
+        "inputs/physionet_gaba",
+        "inputs/PhysioNet_GABA"
+      ],
+      "metadata_candidates": [
+        "labels.csv",
+        "metadata.csv",
+        "conditions.tsv",
+        "events.tsv",
+        "events.csv",
+        "*_events.tsv",
+        "*_events.csv"
+      ],
+      "raw_eeg_extensions": [".edf", ".bdf", ".fif", ".csv", ".tsv"],
+      "label_contract_required": true,
+      "human_review_required": true,
+      "real_execution_supported": false,
+      "dataset_specific_executor_available": false,
+      "generic_artifact_operator_supported": true,
+      "generic_execution_gate_supported": true,
+      "autonomous_iteration_supported": true,
+      "notes": "IMPORTANT SCOPE CORRECTION (found during a repo-wide audit): unlike every other entry in this manifest, 'PhysioNet_GABA' does not name a specific, resolvable OpenNeuro/PhysioNet BIDS EEG dataset -- confirmed by web search (no dataset by this name exists on PhysioNet) and by direct code inspection (source_url_hint above is PhysioNet's generic homepage, not a dataset page). In this repo, 'PhysioNet_GABA' actually means a real, working, but genuinely narrower pipeline: pipelines/run_physionet.py + data/physionet_loader.py::load_physionet_gaba_folder ingest a LOCAL folder of pre-computed spectral-CSV files (alphaWave/slowWave/val_spec/t_spec/f_spec/duration_start_end naming) and compute a Q_proxy/Qabs_proxy phase-spread/amplitude summary from them -- not raw multi-channel EEG via mne/mne_bids like the BIDS-shaped fields above (expected_modality/raw_eeg_extensions) imply. That pipeline is real and has test coverage in tests/test_pipelines.py (empty-dir, filename-pattern matching, too-short-file skipping, and a populated-folder ground-truth check that Q_proxy/Qabs_proxy differ for genuinely different spectral content), not a stub -- but it is not, and structurally cannot be, a dataset-specific-executor-available BIDS streaming target the way ds005620/ds003969/ds003816/ds001787 are, since there is no real dataset URL to stream from. dataset_specific_executor_available/real_execution_supported stay false here for a different reason than ds001787/ds003969's human-review-gate rationale: there is no BIDS dataset to gate. Do not build a fake BIDS/S3 streaming port for this entry -- if a real, specific PhysioNet EEG dataset relevant to GABA/pharmacology research is identified in the future, register it as a NEW manifest entry with its own accurate dataset_id, rather than retrofitting this one.",
+      "guardrails": [
+        "no_data_download",
+        "no_label_inference",
+        "no_target_fabrication",
+        "no_auto_real_execution",
+        "no_auto_peer_review_confirmation"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Do not claim validation. Keep registry outputs as hypothesis scaffolding only.

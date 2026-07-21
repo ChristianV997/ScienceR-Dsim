@@ -1,138 +1,166 @@
-"""P16 pipeline — DS005620 human-reviewed label contract activation path.
+"""P16 CLI — DS005620 human-reviewed label contract activation packet.
 
-CLI for auditing local DS005620 metadata and producing an explicit contract
-activation proposal and human-review packet.
+Audits local DS005620 metadata and produces an activation proposal and
+human-review packet. Does NOT activate any real label contract.
 
-Real contract activation requires a separate human-reviewed PR.
-This pipeline is read-only: no labels are inferred, no targets are fabricated,
-no data is downloaded, and no real contract is activated.
+Usage
+-----
+# Mock fixture (no real data required):
+python -m sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation \\
+  --mock-fixture --out outputs/btc_icft/ds005620_contract_activation
+
+# Real/local metadata:
+python -m sciencer_d.btc_icft.pipelines.prepare_ds005620_contract_activation \\
+  --metadata data/DS005620/events.tsv \\
+  --contract-drafts outputs/btc_icft/label_contract_drafts/contract_drafts.json \\
+  --out outputs/btc_icft/ds005620_contract_activation
 """
 from __future__ import annotations
 
 import argparse
-import csv
-import json
 import sys
-from pathlib import Path
 
 from sciencer_d.btc_icft.labels.ds005620_contract_activation import (
-    _BANNED_PHRASES,
     _SAFE_CLAIM,
-    audit_ds005620_metadata,
-    write_activation_outputs,
+    load_contract_drafts,
+    load_metadata_rows,
+    prepare_ds005620_activation_proposal,
+    write_ds005620_activation_outputs,
 )
 
-_REAL_ACTIVATION_BLOCKED_MSG = (
-    "P16 is a read-only audit pipeline. Real contract activation requires "
-    "a separate human-reviewed PR with declared explicit_label_column, "
-    "positive_values, negative_values, label_scope, and join_keys. "
-    "contract_activation_allowed is always false in this audit."
+_NO_METADATA_MSG = (
+    "DS005620 local metadata is required. "
+    "Provide --metadata or use --mock-fixture."
 )
 
+_MOCK_METADATA_ROWS = [
+    {"onset": "0.0", "duration": "10.0", "trial_type": "focus",
+     "condition": "A", "notes": "participant reported mild distraction",
+     "filename": "sub-01_task-rest_eeg.set"},
+    {"onset": "10.0", "duration": "10.0", "trial_type": "mind_wandering",
+     "condition": "B", "notes": "no report",
+     "filename": "sub-01_task-rest_eeg.set"},
+    {"onset": "20.0", "duration": "10.0", "trial_type": "focus",
+     "condition": "A", "notes": "stable",
+     "filename": "sub-01_task-rest_eeg.set"},
+    {"onset": "30.0", "duration": "10.0", "trial_type": "mind_wandering",
+     "condition": "B", "notes": "n/a",
+     "filename": "sub-01_task-rest_eeg.set"},
+    {"onset": "40.0", "duration": "10.0", "trial_type": "focus",
+     "condition": "A", "notes": "n/a",
+     "filename": "sub-02_task-rest_eeg.set"},
+    {"onset": "50.0", "duration": "10.0", "trial_type": "mind_wandering",
+     "condition": "B", "notes": "distracted",
+     "filename": "sub-02_task-rest_eeg.set"},
+]
 
-def _write_mock_metadata(ds_root: Path) -> Path:
-    ds_root.mkdir(parents=True, exist_ok=True)
-    events_path = ds_root / "events.tsv"
-    rows = [
-        {"onset": "0.0", "duration": "1.0", "trial_type": "condition_a"},
-        {"onset": "1.0", "duration": "1.0", "trial_type": "condition_b"},
-        {"onset": "2.0", "duration": "1.0", "trial_type": "condition_a"},
-        {"onset": "3.0", "duration": "1.0", "trial_type": "condition_b"},
-    ]
-    with events_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["onset", "duration", "trial_type"], delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
-    return events_path
 
-
-def main(argv=None):
+def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         description=(
-            "P16: DS005620 human-reviewed label contract activation audit. "
-            "Read-only. No labels inferred, no targets fabricated, no real contract activated."
+            "P16: DS005620 human-reviewed label contract activation packet. "
+            "Read-only audit. contract_activation_allowed is always false."
         )
     )
     p.add_argument(
-        "--ds-root",
-        default="outputs/btc_icft/ds005620",
-        help="Local DS005620 root directory to inspect.",
+        "--metadata",
+        default=None,
+        help="Path to local DS005620 metadata file (.csv, .tsv, or .json).",
+    )
+    p.add_argument(
+        "--contract-drafts",
+        default=None,
+        dest="contract_drafts",
+        help=(
+            "Path to P14.1 contract_drafts.json. "
+            "Used as inactive hints only; does not activate any contract."
+        ),
     )
     p.add_argument(
         "--out",
         default="outputs/btc_icft/ds005620_contract_activation",
-        help="Output directory for activation proposal and review packet.",
+        help="Output directory.",
     )
     p.add_argument(
         "--mock-fixture",
         action="store_true",
-        help="Write a mock events.tsv fixture and run audit on it.",
-    )
-    p.add_argument(
-        "--declared-label-column",
-        default=None,
-        help="Explicitly declare the label column (for human-reviewed use only).",
-    )
-    p.add_argument(
-        "--declared-positive-values",
-        nargs="*",
-        default=None,
-        help="Explicitly declare positive label values.",
-    )
-    p.add_argument(
-        "--declared-negative-values",
-        nargs="*",
-        default=None,
-        help="Explicitly declare negative label values.",
-    )
-    p.add_argument(
-        "--declared-label-scope",
-        default=None,
-        choices=["window", "file", "subject", "session"],
-        help="Explicitly declare the label scope.",
-    )
-    p.add_argument(
-        "--declared-join-keys",
-        nargs="*",
-        default=None,
-        help="Explicitly declare join key field names.",
+        default=False,
+        help="Use deterministic mock metadata (no real data required).",
     )
 
     a = p.parse_args(argv)
 
-    ds_root = Path(a.ds_root)
-
+    # Load metadata
     if a.mock_fixture:
-        events_path = _write_mock_metadata(ds_root)
-        print(f"[mock] Wrote mock fixture: {events_path}", file=sys.stderr)
+        metadata_rows = _MOCK_METADATA_ROWS
+        print("[p16] Using mock fixture metadata.", file=sys.stderr)
+    elif a.metadata is not None:
+        try:
+            metadata_rows = load_metadata_rows(a.metadata)
+        except FileNotFoundError as exc:
+            print(f"[p16] ERROR: {exc}", file=sys.stderr)
+            return 1
+        except ValueError as exc:
+            print(f"[p16] ERROR: {exc}", file=sys.stderr)
+            return 1
+        print(f"[p16] Loaded {len(metadata_rows)} rows from {a.metadata}.", file=sys.stderr)
+    else:
+        print(f"[p16] ERROR: {_NO_METADATA_MSG}", file=sys.stderr)
+        return 1
 
-    proposal, audit_rows = audit_ds005620_metadata(
-        ds_root=str(ds_root),
-        declared_label_column=a.declared_label_column,
-        declared_positive_values=a.declared_positive_values,
-        declared_negative_values=a.declared_negative_values,
-        declared_label_scope=a.declared_label_scope,
-        declared_join_keys=a.declared_join_keys,
-    )
+    # Load contract drafts if provided
+    contract_drafts = None
+    if a.contract_drafts is not None:
+        try:
+            contract_drafts = load_contract_drafts(a.contract_drafts)
+            print(
+                f"[p16] Loaded contract drafts from {a.contract_drafts} "
+                "(used as inactive hints only).",
+                file=sys.stderr,
+            )
+        except FileNotFoundError as exc:
+            print(f"[p16] ERROR: {exc}", file=sys.stderr)
+            return 1
 
+    # Prepare activation result
+    result = prepare_ds005620_activation_proposal(metadata_rows, contract_drafts)
+
+    # Write outputs
     try:
-        paths = write_activation_outputs(proposal, audit_rows, a.out)
+        paths = write_ds005620_activation_outputs(result, a.out)
     except ValueError as exc:
         print(f"[p16] FAILED: {exc}", file=sys.stderr)
         return 1
 
-    print(f"\n[p16] DS005620 contract activation audit complete.", file=sys.stderr)
-    print(f"  metadata_file_exists: {proposal.gates.metadata_file_exists}", file=sys.stderr)
-    print(f"  candidate_label_column: {proposal.candidate_label_column}", file=sys.stderr)
-    print(f"  observed_values: {proposal.observed_values}", file=sys.stderr)
-    print(f"  activation_blockers: {len(proposal.activation_blockers)}", file=sys.stderr)
+    # Summary
+    proposal = result.activation_proposal
+    print(f"\n[p16] DS005620 contract activation packet complete.", file=sys.stderr)
+    print(f"  n_metadata_rows: {result.n_metadata_rows}", file=sys.stderr)
+    print(f"  metadata_file_exists: {result.metadata_file_exists}", file=sys.stderr)
+    print(
+        f"  candidate_label_columns: {proposal.get('candidate_label_columns', [])}",
+        file=sys.stderr,
+    )
+    print(f"  positive_values: [] (not declared)", file=sys.stderr)
+    print(f"  negative_values: [] (not declared)", file=sys.stderr)
     print(f"  contract_activation_allowed: False (always)", file=sys.stderr)
-    print(f"  is_ready_for_human_review: {proposal.is_ready_for_human_review()}", file=sys.stderr)
+    print(f"  activation_blockers: {len(proposal.get('activation_blockers', []))}", file=sys.stderr)
+
+    if result.warnings:
+        print(f"  warnings:", file=sys.stderr)
+        for w in result.warnings:
+            print(f"    - {w}", file=sys.stderr)
+
     print(f"\n  Outputs written to: {a.out}", file=sys.stderr)
     for key, path in paths.items():
         print(f"    {key}: {path}", file=sys.stderr)
 
-    print(f"\n  NOTE: {_REAL_ACTIVATION_BLOCKED_MSG}", file=sys.stderr)
+    print(
+        "\n  NOTE: Real contract activation requires a separate human-reviewed PR "
+        "with declared explicit_label_column, positive_values, negative_values, "
+        "label_scope, and join_keys.",
+        file=sys.stderr,
+    )
 
     return 0
 

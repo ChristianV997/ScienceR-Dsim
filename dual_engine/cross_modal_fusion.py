@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.nn import GCNConv, Sequential as GeoSequential, global_mean_pool
 from torch_geometric.data import Data, DataLoader
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
@@ -100,32 +100,33 @@ class CrossModalAttention(nn.Module):
 class CrossModalFusionNetwork(nn.Module):
     """GNN + attention network for cross-modal topology fusion."""
 
-    def __init__(self, config: FusionConfig, num_nodes: int = 360):
+    def __init__(self, config: FusionConfig, num_nodes: int = 360, node_feature_dim: int = 1):
         super().__init__()
         self.config = config
         self.num_nodes = num_nodes
 
-        # Per-modality GCN encoders
-        self.bold_gcn = nn.Sequential(
-            GCNConv(num_nodes, config.hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(config.dropout),
-            GCNConv(config.hidden_dim, config.latent_dim),
-        )
+        # Per-modality GCN encoders. plain torch.nn.Sequential only chains a
+        # single positional tensor between modules, but GCNConv needs both
+        # (x, edge_index) at every layer -- torch_geometric.nn.Sequential's
+        # 'args -> out' signature strings thread edge_index through each
+        # GCNConv call while passing only x through the plain nn layers.
+        #
+        # The first GCNConv's in_channels must be `node_feature_dim` (the
+        # per-node input feature width, e.g. 1 scalar per node), NOT
+        # `num_nodes` (the graph's node count) -- those are unrelated
+        # quantities. `num_nodes` is still correct for the decoders below,
+        # which reconstruct a dense (batch, num_nodes) vector per graph.
+        def _make_gcn() -> GeoSequential:
+            return GeoSequential('x, edge_index', [
+                (GCNConv(node_feature_dim, config.hidden_dim), 'x, edge_index -> x'),
+                nn.ReLU(inplace=True),
+                nn.Dropout(config.dropout),
+                (GCNConv(config.hidden_dim, config.latent_dim), 'x, edge_index -> x'),
+            ])
 
-        self.eeg_gcn = nn.Sequential(
-            GCNConv(num_nodes, config.hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(config.dropout),
-            GCNConv(config.hidden_dim, config.latent_dim),
-        )
-
-        self.synthetic_gcn = nn.Sequential(
-            GCNConv(num_nodes, config.hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(config.dropout),
-            GCNConv(config.hidden_dim, config.latent_dim),
-        )
+        self.bold_gcn = _make_gcn()
+        self.eeg_gcn = _make_gcn()
+        self.synthetic_gcn = _make_gcn()
 
         # Cross-modal attention
         self.attention = CrossModalAttention(config.latent_dim, config.num_heads)

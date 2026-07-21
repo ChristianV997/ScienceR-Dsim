@@ -1,7 +1,6 @@
-dataset_scope: ds005620_contract_activation_audit
+dataset_scope: ds005620_contract_activation
 pipeline_id: ds005620_contract_activation_v0
 dataset_id: DS005620
-default_ds_root: outputs/btc_icft/ds005620
 default_out: outputs/btc_icft/ds005620_contract_activation
 
 required_outputs:
@@ -26,7 +25,20 @@ activation_gates:
 
 contract_activation_allowed: false
 
+default_label_scope: window
+
+default_join_keys:
+  - dataset_id
+  - row_id
+  - source_file
+  - window_id
+  - window_start_s
+  - window_end_s
+  - sample_start
+  - sample_end
+
 guardrails:
+  - no_data_download
   - no_label_inference
   - no_target_fabrication
   - no_sedated_to_no_experience
@@ -37,54 +49,32 @@ guardrails:
   - no_automatic_real_contract_activation
   - no_p11_gate_modification
   - no_legacy_mt_real_change
-  - no_data_download
-  - no_consciousness_claims
+  - no_level_o
+  - no_ontology_claims
   - no_soul_afterlife_claims
   - no_liberation_claims
-  - no_ontology_proof_claims
-  - no_q_equals_self
-  - no_q_equals_soul
 
-required_contract_fields_for_real_activation:
-  - explicit_label_column
-  - positive_values
-  - negative_values
-  - label_scope
-  - join_keys
-  - metadata_provenance
-  - reason_mapping_is_valid
-  - reason_no_shortcut_inference
+required_human_decisions:
+  - choose explicit_label_column
+  - declare positive_values
+  - declare negative_values
+  - declare label_scope
+  - verify join_keys
+  - verify metadata provenance
+  - justify semantic mapping
+  - confirm no shortcut inference
+  - approve contract activation in separate PR
 
-candidate_metadata_filenames:
-  - events.tsv
-  - events.csv
-  - "*_events.tsv"
-  - "*_events.csv"
-  - participants.tsv
-  - participants.csv
-
-known_label_columns:
-  - trial_type
-  - condition
-  - state
-  - label
-  - task
-
-known_ambiguous_values:
-  - n/a
-  - na
-  - nan
-  - none
-  - unknown
-  - undefined
-  - ""
-  - "?"
-  - other
+candidate_metadata_formats:
+  - .csv
+  - .tsv
+  - .json
 
 notes:
   - Read-only audit; no labels inferred, no targets fabricated, no data downloaded.
+  - contract_activation_allowed is always false from this pipeline.
   - Real contract activation requires a separate human-reviewed PR.
-  - contract_activation_allowed is always false in this pipeline.
   - Does not modify P11 promotion gates.
   - Does not modify legacy DS005620 mt_real semantics.
+  - contract_drafts.json from P14.1 is used as inactive hints only.
   - PyYAML is NOT required; tests may inspect this file as plain text.
