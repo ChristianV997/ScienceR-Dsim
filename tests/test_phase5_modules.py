@@ -1,8 +1,12 @@
 """Tests for Phase 5 modules: neuromaps, atlas utilities, and fast-TR fixtures."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import numpy as np
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,7 +284,7 @@ def test_phase5_modules_no_hard_dependencies():
 
 def test_phase5_dependencies_documented():
     """Test that Phase 5 dependencies are added to requirements.txt."""
-    with open("/home/user/ScienceR-Dsim/requirements.txt") as f:
+    with open(_REPO_ROOT / "requirements.txt") as f:
         content = f.read()
         assert "neuromaps" in content
         assert "nilearn" in content
