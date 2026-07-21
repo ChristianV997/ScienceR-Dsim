@@ -18,6 +18,7 @@ from sciencer_d.btc_icft.level_m.generic_windows import (  # noqa: F401  (re-exp
     build_window_leakage_report,
 )
 from sciencer_d.btc_icft.level_m import generic_windows as _G
+from sciencer_d.btc_icft.report_guardrails import BANNED_REPORT_PHRASES, validate_safe_text  # noqa: F401  (re-exported public API)
 
 _CONFIG = get_dataset_config("ds003816")
 

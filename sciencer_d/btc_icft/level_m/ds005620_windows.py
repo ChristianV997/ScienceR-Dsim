@@ -20,6 +20,7 @@ from pathlib import Path
 
 from sciencer_d.btc_icft.datasets.onboarding_registry import get_dataset_config
 from sciencer_d.btc_icft.level_m.features import extract_level_m_features
+from sciencer_d.btc_icft.report_guardrails import BANNED_REPORT_PHRASES, validate_safe_text  # noqa: F401  (re-exported public API)
 from sciencer_d.btc_icft.level_m.generic_windows import (  # noqa: F401  (re-exported public API)
     LevelMRealWindowResult,
     LevelMWindowRow,
