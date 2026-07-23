@@ -25,6 +25,7 @@ def test_propofol_registry_maps_real_bids_tasks():
         "awake": "awake",
         "sed": "sedated",
         "sed2": "sedated",
+        "sedated": "sedated",
     }
 
 
