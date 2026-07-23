@@ -19,6 +19,21 @@ from pipelines.run_neurolib import run as run_neurolib
 from pipelines.run_fast_tr_validation import run as run_fast_tr_validation
 from database.database import connect, start_run, finish_run, add_metric, add_artifact
 
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return parsed
+
+
 def run_synthetic():
     """Run synthetic validation checks and save summary metrics.
 
@@ -74,6 +89,18 @@ def main():
     ap.add_argument("--compute-phase-grid-topology", action="store_true")
     ap.add_argument("--compute-kuramoto", action="store_true")
     ap.add_argument("--compute-leida", action="store_true")
+    ap.add_argument("--n-nodes", type=_positive_int, default=32)
+    ap.add_argument(
+        "--neurolib-model",
+        choices=["kuramoto", "hopf", "wilson_cowan", "aln"],
+        default="kuramoto",
+    )
+    ap.add_argument("--t-max", type=_positive_float, default=10.0)
+    ap.add_argument("--coupling", type=float, default=0.1)
+    ap.add_argument("--n-voxels", type=_positive_int, default=32)
+    ap.add_argument("--n-timepoints", type=_positive_int, default=500)
+    ap.add_argument("--tr", type=_positive_float, default=0.645)
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--db", default="data/runs.sqlite")
     ap.add_argument("--config", default="config/defaults.yaml")
     ap.add_argument("--max-records", type=int, default=None)
@@ -115,20 +142,20 @@ def main():
     elif args.mode == "neural_mass":
         record = run_neurolib(
             output_csv=args.output,
-            n_nodes=getattr(args, "n_nodes", 32),
-            model_type=getattr(args, "neurolib_model", "kuramoto"),
-            t_max=getattr(args, "t_max", 10.0),
-            coupling=getattr(args, "coupling", 0.1),
-            seed=getattr(args, "seed", 0),
+            n_nodes=args.n_nodes,
+            model_type=args.neurolib_model,
+            t_max=args.t_max,
+            coupling=args.coupling,
+            seed=args.seed,
         )
         print(f"RunRecord: {record.run_id}")
     elif args.mode == "fast_tr_validation":
         record = run_fast_tr_validation(
             output_csv=args.output,
-            n_voxels=getattr(args, "n_voxels", 32),
-            n_timepoints=getattr(args, "n_timepoints", 500),
-            tr=getattr(args, "tr", 0.645),
-            seed=getattr(args, "seed", 0),
+            n_voxels=args.n_voxels,
+            n_timepoints=args.n_timepoints,
+            tr=args.tr,
+            seed=args.seed,
         )
         print(f"Fast-TR validation: {record.run_id}")
     elif args.mode == "cross-domain":

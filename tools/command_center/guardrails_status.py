@@ -6,7 +6,7 @@ def _read(p: Path):
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
 
@@ -33,7 +33,7 @@ def build_guardrails_status() -> dict:
         "guardrails": guardrails,
         "violations": violations,
         "warnings": warnings,
-        "last_checked": datetime.datetime.utcnow().isoformat() + "Z",
+        "last_checked": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "safe_to_answer_publicly": len(violations) == 0,
         "safe_to_run_real_data": False,
         "ontology_promotion_allowed": False,
@@ -42,7 +42,7 @@ def build_guardrails_status() -> dict:
 def main(argv=None):
     p=argparse.ArgumentParser(); p.add_argument("--out", required=True); a=p.parse_args(argv)
     out=Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(build_guardrails_status(), indent=2, sort_keys=True))
+    out.write_text(json.dumps(build_guardrails_status(), indent=2, sort_keys=True), encoding="utf-8")
     return 0
 
 if __name__ == "__main__":

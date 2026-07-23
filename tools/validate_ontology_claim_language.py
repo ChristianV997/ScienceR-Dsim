@@ -163,9 +163,9 @@ def _collect_files(root: Path, args: argparse.Namespace) -> tuple[list[Path], li
             if out_root.exists():
                 files.extend(_iter_files(out_root, args.include_tests) or [])
                 if mode == "generated":
-                    scanned_generated_roots.append(str(Path(out)))
+                    scanned_generated_roots.append(Path(out).as_posix())
             else:
-                skipped_roots.append(str(Path(out)))
+                skipped_roots.append(Path(out).as_posix())
     if include_repo:
         for p in _iter_files(root, args.include_tests) or []:
             files.append(p)

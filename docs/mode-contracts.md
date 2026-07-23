@@ -7,6 +7,8 @@
 | eeg | `python main.py --mode eeg --input <dir> --dataset <id>` | EEG input root, dataset id | EEG metrics CSV under `results/<dataset>/` | exits non-zero on read/compute failures | exploratory metrics |
 | physionet | `python main.py --mode physionet --input <dir>` | PhysioNet-compatible input root | `results/physionet_gaba/metrics_physionet_gaba.csv` | exits non-zero on input/compute failures | exploratory metrics |
 | physics | `python main.py --mode physics --input <file.npy>` | existing `.npy` file | output CSV (default `results/out.csv`) | argument error for missing/non-`.npy` input, non-zero on runtime error | utility validation |
+| neural_mass | `python main.py --mode neural_mass --neurolib-model kuramoto --n-nodes 32` | none; optional model controls | `RunRecordV1` JSON at `--output` | exits non-zero on invalid model/integration errors | synthetic comparator |
+| fast_tr_validation | `python main.py --mode fast_tr_validation --tr 0.645` | none; optional synthetic controls | `RunRecordV1` JSON at `--output` | exits non-zero on generation/compute errors | synthetic validation |
 | cross-domain | `python main.py --mode cross-domain --results-root results` | results root directory | consolidated cross-domain CSV | exits non-zero on aggregation errors | reporting utility |
 | external | `python main.py --mode external --config config/defaults.yaml` | config file; optional db path and max-records | external metrics CSV + optional db updates | exits non-zero on config/source failures | integration utility |
 | db | `python main.py --mode db --db data/runs.sqlite` | writable sqlite path | DB run row + metric + artifact records | exits non-zero on DB errors | ops/traceability utility |

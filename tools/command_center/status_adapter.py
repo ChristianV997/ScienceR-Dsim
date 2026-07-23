@@ -8,7 +8,7 @@ def _read(path: str):
     if not p.exists():
         return {"status": "not_available", "source": path}
     try:
-        return {"status": "available", "source": path, "data": json.loads(p.read_text())}
+        return {"status": "available", "source": path, "data": json.loads(p.read_text(encoding="utf-8"))}
     except Exception:
         return {"status": "not_available", "source": path}
 
@@ -21,7 +21,7 @@ def build_status() -> dict:
     warnings=[f"missing:{x['source']}" for x in rag+local+tol+[action_queue] if x['status']!="available"]
     return {
         "ok": True,
-        "generated_at": datetime.datetime.utcnow().isoformat()+"Z",
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_status": "degraded" if warnings else "ok",
         "rag_status": rag,
         "local_ops_status": local,
@@ -36,7 +36,7 @@ def build_status() -> dict:
 def main(argv=None):
     p=argparse.ArgumentParser(); p.add_argument("--out", required=True); a=p.parse_args(argv)
     out=Path(a.out); out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(build_status(), indent=2, sort_keys=True))
+    out.write_text(json.dumps(build_status(), indent=2, sort_keys=True), encoding="utf-8")
     return 0
 
 if __name__=="__main__":

@@ -36,7 +36,7 @@ def _generate_mock_fixture_files(tmp_dir: Path) -> list[str]:
 
     # Create a CSV fixture
     csv_file = tmp_dir / "mock_sensor_1.csv"
-    with open(csv_file, "w") as f:
+    with open(csv_file, "w", encoding="utf-8") as f:
         f.write("# channels: 8\n")
         f.write("# sample_rate: 250.0\n")
         f.write("time,ch1,ch2,ch3,ch4,ch5,ch6,ch7,ch8\n")
@@ -48,7 +48,7 @@ def _generate_mock_fixture_files(tmp_dir: Path) -> list[str]:
 
     # Create a TXT fixture
     txt_file = tmp_dir / "mock_sensor_2.txt"
-    with open(txt_file, "w") as f:
+    with open(txt_file, "w", encoding="utf-8") as f:
         f.write("# channels: 4\n")
         f.write("# sample_rate: 128.0\n")
         for i in range(50):

@@ -330,7 +330,7 @@ def _runs_jsonl_entry(loop_root: Path) -> str:
     if not loop_next:
         loop_next = _read_json_safe(loop_root / "loop_next_action.json") or {}
     entry = {
-        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "next_action": loop_next.get("next_action", "unknown"),
         "source": "obsidian_sync",
     }
@@ -369,23 +369,23 @@ def sync_obsidian(
         note_content = _dataset_status_note(ds_id, outputs)
         note_path = _safe_note_path(vault, f"{config.dataset_folder}/{ds_id}.md")
         note_path.write_text(note_content, encoding="utf-8")
-        result.notes_written.append(str(note_path))
+        result.notes_written.append(note_path.as_posix())
 
     loop_note = _loop_state_note(loop_root)
     loop_path = _safe_note_path(vault, f"{config.loop_folder}/loop_state.md")
     loop_path.write_text(loop_note, encoding="utf-8")
-    result.notes_written.append(str(loop_path))
+    result.notes_written.append(loop_path.as_posix())
 
     matrix_root = outputs / "multi_dataset_real_execution"
     matrix_note = _matrix_note(matrix_root)
     matrix_path = _safe_note_path(vault, f"{config.matrix_folder}/matrix.md")
     matrix_path.write_text(matrix_note, encoding="utf-8")
-    result.notes_written.append(str(matrix_path))
+    result.notes_written.append(matrix_path.as_posix())
 
     index = _index_note(config, dataset_ids)
     index_path = _safe_note_path(vault, config.index_note)
     index_path.write_text(index, encoding="utf-8")
-    result.notes_written.append(str(index_path))
+    result.notes_written.append(index_path.as_posix())
 
     # ------------------------------------------------------------------ #
     # P24 structured vault paths
@@ -395,54 +395,54 @@ def sync_obsidian(
     dash_status = _dashboard_status_note(outputs, loop_root)
     p = _safe_note_path(vault, "00_Dashboard/ScienceR-Dsim_Status.md")
     p.write_text(dash_status, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     open_tasks = _open_tasks_note(outputs, loop_root)
     p = _safe_note_path(vault, "00_Dashboard/Open_Tasks.md")
     p.write_text(open_tasks, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     roster = _agent_roster_note()
     p = _safe_note_path(vault, "00_Dashboard/Agent_Roster.md")
     p.write_text(roster, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     # 01_Datasets — per-dataset (reuse content)
     for ds_id in dataset_ids:
         note_content = _dataset_status_note(ds_id, outputs)
         p = _safe_note_path(vault, f"01_Datasets/{ds_id}.md")
         p.write_text(note_content, encoding="utf-8")
-        result.notes_written.append(str(p))
+        result.notes_written.append(p.as_posix())
 
     multi_matrix = _matrix_note(matrix_root)
     p = _safe_note_path(vault, "01_Datasets/Multi_Dataset_Matrix.md")
     p.write_text(multi_matrix, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     # 02_Runtime
     iter_log = _iteration_log_note(outputs)
     p = _safe_note_path(vault, "02_Runtime/Autonomous_Iteration_Log.md")
     p.write_text(iter_log, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     # 03_Evidence
     evidence = _evidence_ledger_note(outputs)
     p = _safe_note_path(vault, "03_Evidence/Evidence_Ledger.md")
     p.write_text(evidence, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     # 04_Ontology
     ontology = _ontology_scope_note(outputs)
     p = _safe_note_path(vault, "04_Ontology/Claim_Scope_Matrix.md")
     p.write_text(ontology, encoding="utf-8")
-    result.notes_written.append(str(p))
+    result.notes_written.append(p.as_posix())
 
     # 99_Agent_Memory — append a JSONL run entry
     mem_path = _safe_note_path(vault, "99_Agent_Memory/runs.jsonl")
     entry = _runs_jsonl_entry(loop_root)
     with mem_path.open("a", encoding="utf-8") as f:
         f.write(entry + "\n")
-    result.notes_written.append(str(mem_path))
+    result.notes_written.append(mem_path.as_posix())
 
     # Determine next_action for result
     loop_next = _read_json_safe(loop_root / "research_loop_next_action.json") or {}

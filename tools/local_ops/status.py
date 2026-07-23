@@ -93,7 +93,7 @@ def build_ops_status(
 
     return {
         "ok": True,
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "last_run_status": last_run_status,
         "last_run_time": last_run_time,
         "next_action": next_action,

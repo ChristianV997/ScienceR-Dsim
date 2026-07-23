@@ -19,6 +19,7 @@ def test_s3_fetchers_import():
 )
 def test_nki_rs_fetcher_init():
     """Test NKI-RS fetcher initialization."""
+    from botocore import UNSIGNED
     from validation.s3_fetchers import NKIRSFetcher
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -26,6 +27,7 @@ def test_nki_rs_fetcher_init():
         fetcher = NKIRSFetcher(cache_dir=tmpdir)
         assert fetcher.bucket == "nki-openaccess"
         assert fetcher.region == "us-east-1"
+        assert fetcher.s3_client.meta.config.signature_version == UNSIGNED
 
 
 @pytest.mark.skipif(

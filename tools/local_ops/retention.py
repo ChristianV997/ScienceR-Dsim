@@ -36,7 +36,7 @@ def archive_current_run(output_root: str | Path) -> Path | None:
     if not files_to_archive:
         return None
 
-    ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     archive_dir = runs_dir / ts
     archive_dir.mkdir(parents=True, exist_ok=True)
 

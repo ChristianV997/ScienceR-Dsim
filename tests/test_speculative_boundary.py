@@ -25,7 +25,7 @@ _BTC_ICFT_DIR = _REPO_ROOT / "sciencer_d" / "btc_icft"
 
 
 def _imported_module_names(py_file: Path) -> list[str]:
-    tree = ast.parse(py_file.read_text())
+    tree = ast.parse(py_file.read_text(encoding="utf-8"))
     names = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -70,7 +70,7 @@ def test_no_published_dataset_report_directory_contains_speculative_output():
     if not outputs_btc_icft.exists():
         pytest.skip("outputs/btc_icft not present in this checkout")
     for report in outputs_btc_icft.rglob("REPORT_*.md"):
-        text = report.read_text(errors="ignore")
+        text = report.read_text(encoding="utf-8", errors="ignore")
         assert SPECULATIVE_BANNER not in text, f"{report} unexpectedly contains the speculative banner"
 
 

@@ -35,7 +35,7 @@ def _generate_mock_fixture_files(tmp_dir: Path) -> list[str]:
 
     # CSV fixture: 8 channels, 250 Hz, 50 rows
     csv_file = tmp_dir / "mock_signal_8ch.csv"
-    with open(csv_file, "w") as f:
+    with open(csv_file, "w", encoding="utf-8") as f:
         f.write("# channels: 8\n")
         f.write("# sample_rate: 250.0\n")
         f.write("time,ch1,ch2,ch3,ch4,ch5,ch6,ch7,ch8\n")
@@ -46,7 +46,7 @@ def _generate_mock_fixture_files(tmp_dir: Path) -> list[str]:
 
     # TXT fixture: 4 channels, 100 Hz, 200 rows (no time column)
     txt_file = tmp_dir / "mock_signal_4ch.txt"
-    with open(txt_file, "w") as f:
+    with open(txt_file, "w", encoding="utf-8") as f:
         f.write("# channels: 4\n")
         f.write("# sample_rate: 100.0\n")
         for i in range(200):
@@ -56,7 +56,7 @@ def _generate_mock_fixture_files(tmp_dir: Path) -> list[str]:
 
     # TSV fixture: 2 channels, 128 Hz, 30 rows
     tsv_file = tmp_dir / "mock_signal_2ch.tsv"
-    with open(tsv_file, "w") as f:
+    with open(tsv_file, "w", encoding="utf-8") as f:
         f.write("# channels: 2\n")
         f.write("# sample_rate: 128.0\n")
         f.write("# channel_names: left,right\n")

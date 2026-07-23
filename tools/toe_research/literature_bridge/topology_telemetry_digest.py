@@ -13,5 +13,5 @@ local-global mismatch
 topology transition distance
 E_sheaf(x) = Σ_(v,e) ||ρ_{v←e}(x_e) - x_v||²
 L_sheaf = δᵀδ
-Guardrail: Q/Qabs/fdress are candidate topology telemetry only.''')
+Guardrail: Q/Qabs/fdress are candidate topology telemetry only.''', encoding='utf-8')
 if __name__=='__main__':main()

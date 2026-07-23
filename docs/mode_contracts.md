@@ -10,6 +10,9 @@ This document defines runtime contracts for each `--mode` in `main.py` so caller
 - `--dataset` defaults to `ds002094` and only impacts `eeg` mode.
 - `--results-root` defaults to `results` and only impacts `cross-domain` mode.
 - `--compute-pci` is only consumed by `eeg` mode.
+- `--compute-phase-grid-topology`, `--compute-kuramoto`, and `--compute-leida` enable optional EEG analyses.
+- `--n-nodes`, `--neurolib-model`, `--t-max`, `--coupling`, and `--seed` configure `neural_mass`.
+- `--n-voxels`, `--n-timepoints`, `--tr`, and `--seed` configure `fast_tr_validation`.
 - `--db` defaults to `data/runs.sqlite`; used by `external` and `db`.
 - `--config` defaults to `config/defaults.yaml`; used by `external`.
 - `--max-records` is optional and only used by `external`.
@@ -50,6 +53,20 @@ This document defines runtime contracts for each `--mode` in `main.py` so caller
 - **External dependencies/datasets**: local `.npy` physics data file.
 - **Offline-safe**: yes.
 - **Primary entrypoints**: `main.main()` -> `pipelines.run_physics.run_from_npy()`.
+
+## `neural_mass`
+- **Required inputs**: none; optional simulation controls are `--n-nodes`, `--neurolib-model`, `--t-max`, `--coupling`, and `--seed`.
+- **Output artifact paths/formats**: `RunRecordV1` JSON at `--output`.
+- **External dependencies/datasets**: `neurolib`; synthetic connectivity is generated locally.
+- **Offline-safe**: yes after dependencies are installed.
+- **Primary entrypoints**: `main.main()` -> `pipelines.run_neurolib.run()`.
+
+## `fast_tr_validation`
+- **Required inputs**: none; optional synthetic controls are `--n-voxels`, `--n-timepoints`, `--tr`, and `--seed`.
+- **Output artifact paths/formats**: `RunRecordV1` JSON at `--output`.
+- **External dependencies/datasets**: generated synthetic fast-TR BOLD-like data.
+- **Offline-safe**: yes.
+- **Primary entrypoints**: `main.main()` -> `pipelines.run_fast_tr_validation.run()`.
 
 ## `cross-domain`
 - **Required inputs**: `--results-root` directory of prior outputs; `--output` destination.
