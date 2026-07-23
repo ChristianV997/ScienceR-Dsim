@@ -101,7 +101,7 @@ def _try_read_fixture_text(path: Path) -> tuple[bool, Optional[int], Optional[fl
         (readable, n_channels, sample_rate_hz, errors) tuple.
     """
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         if not lines:
@@ -317,7 +317,7 @@ def write_eeg_reader_outputs(
     # Write reader capability report
     cap_report = build_reader_capability_report()
     cap_file = out_path / "reader_capability_report.json"
-    with open(cap_file, "w") as f:
+    with open(cap_file, "w", encoding="utf-8") as f:
         json.dump(cap_report, f, indent=2)
     outputs["reader_capability_report"] = str(cap_file)
 
@@ -328,21 +328,21 @@ def write_eeg_reader_outputs(
         "readable_files": sum(1 for r in readability_rows if r.readable),
     }
     read_file = out_path / "file_readability_report.json"
-    with open(read_file, "w") as f:
+    with open(read_file, "w", encoding="utf-8") as f:
         json.dump(readability_report, f, indent=2)
     outputs["file_readability_report"] = str(read_file)
 
     # Write channel inventory
     inventory = build_channel_inventory(readability_rows)
     inventory_file = out_path / "channel_inventory.json"
-    with open(inventory_file, "w") as f:
+    with open(inventory_file, "w", encoding="utf-8") as f:
         json.dump(asdict(inventory), f, indent=2)
     outputs["channel_inventory"] = str(inventory_file)
 
     # Write markdown report
     md_report = _build_markdown_report(readability_rows, cap_report, inventory)
     md_file = out_path / "report.md"
-    with open(md_file, "w") as f:
+    with open(md_file, "w", encoding="utf-8") as f:
         f.write(md_report)
     outputs["report"] = str(md_file)
 

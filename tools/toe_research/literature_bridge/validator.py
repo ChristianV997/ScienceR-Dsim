@@ -11,15 +11,15 @@ def main():
         if not (r/f).exists(): v.append(f'missing {f}')
     texts=[]
     for f in r.iterdir():
-        if f.is_file(): texts.append(f.read_text(errors='ignore'))
+        if f.is_file(): texts.append(f.read_text(encoding='utf-8', errors='ignore'))
     txt='\n'.join(texts).lower()
     for b in BAD:
         if b in txt: v.append('forbidden:'+b)
     for f in NON_EMPTY_LIST_FILES:
         path=r/f
         if path.exists():
-            try: data=json.loads(path.read_text())
+            try: data=json.loads(path.read_text(encoding='utf-8'))
             except Exception: data=[]
             if not isinstance(data,list) or not data: v.append(f'empty_or_invalid_registry:{f}')
-    out={'ok':not v,'violations':v};Path(a.json_out).write_text(json.dumps(out,indent=2));raise SystemExit(0 if not v else 1)
+    out={'ok':not v,'violations':v};Path(a.json_out).write_text(json.dumps(out,indent=2), encoding='utf-8');raise SystemExit(0 if not v else 1)
 if __name__=='__main__':main()

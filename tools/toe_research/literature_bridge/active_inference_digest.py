@@ -11,5 +11,5 @@ allostatic cost
 interoceptive/exteroceptive arbitration
 recalibration latency
 dukkha / taṇhā / upādāna
-not proof''')
+not proof''', encoding='utf-8')
 if __name__=='__main__':main()

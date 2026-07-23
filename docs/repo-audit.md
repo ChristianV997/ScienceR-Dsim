@@ -2,7 +2,7 @@
 
 ## Scope snapshot
 
-- CLI entrypoint in `main.py` supports eight modes (`synthetic`, `qzt`, `eeg`, `physionet`, `physics`, `cross-domain`, `external`, `db`).
+- CLI entrypoint in `main.py` supports ten modes (`synthetic`, `qzt`, `eeg`, `physionet`, `physics`, `neural_mass`, `fast_tr_validation`, `cross-domain`, `external`, `db`).
 - Pipelines are separated by modality under `pipelines/`.
 - Validation/math utilities live in `validation/` and `core/`.
 - Awareness Studio is a nested app under `apps/awareness_studio/` with its own tests and packaging.

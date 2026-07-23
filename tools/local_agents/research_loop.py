@@ -98,7 +98,7 @@ class ResearchLoopResult:
 
 
 def _timestamp() -> str:
-    return datetime.datetime.utcnow().isoformat() + "Z"
+    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _try_ollama_summary(config: ResearchLoopConfig, state_summary: str) -> str:

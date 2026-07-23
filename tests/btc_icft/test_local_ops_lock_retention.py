@@ -61,7 +61,9 @@ def test_stale_lock_can_be_replaced(tmp_path):
     lock_path = tmp_path / "test_lock.json"
     # Write a lock with very old timestamp
     import datetime
-    old_ts = (datetime.datetime.utcnow() - datetime.timedelta(hours=5)).isoformat() + "Z"
+    old_ts = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=5)
+    ).isoformat().replace("+00:00", "Z")
     lock_data = {"owner": "old_runner", "acquired_at": old_ts, "ttl_seconds": 60, "pid": 0}
     lock_path.write_text(json.dumps(lock_data), encoding="utf-8")
 
@@ -76,7 +78,7 @@ def test_is_lock_stale_fresh():
     import datetime
     lock = LocalOpsLock(
         owner="runner",
-        acquired_at=datetime.datetime.utcnow().isoformat() + "Z",
+        acquired_at=datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         ttl_seconds=3600,
         pid=1,
     )
@@ -85,7 +87,9 @@ def test_is_lock_stale_fresh():
 
 def test_is_lock_stale_expired():
     import datetime
-    old_ts = (datetime.datetime.utcnow() - datetime.timedelta(hours=3)).isoformat() + "Z"
+    old_ts = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
+    ).isoformat().replace("+00:00", "Z")
     lock = LocalOpsLock(owner="runner", acquired_at=old_ts, ttl_seconds=60, pid=1)
     assert is_lock_stale(lock, 60) is True
 

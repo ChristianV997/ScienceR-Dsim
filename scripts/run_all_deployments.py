@@ -16,6 +16,20 @@ from typing import Dict, List, Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+class _ClosingFileHandler(logging.FileHandler):
+    """Write each record without retaining a Windows file lock."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.stream is None:
+            self.stream = self._open()
+        try:
+            logging.StreamHandler.emit(self, record)
+        finally:
+            if self.stream is not None:
+                self.stream.close()
+                self.stream = None
+
+
 class DeploymentOrchestrator:
     """Orchestrate sequential execution of all three deployments."""
 
@@ -60,15 +74,18 @@ class DeploymentOrchestrator:
 
     def _setup_logging(self) -> logging.Logger:
         """Setup master logger."""
-        logger = logging.getLogger("DeploymentOrchestrator")
+        logger = logging.Logger(f"DeploymentOrchestrator.{self.run_dir.resolve()}")
         logger.setLevel(logging.DEBUG)
+        logger.propagate = False
 
         # Console handler
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
 
         # File handler
-        fh = logging.FileHandler(self.run_dir / "run.log")
+        log_path = self.run_dir / "run.log"
+        log_path.touch()
+        fh = _ClosingFileHandler(log_path, encoding="utf-8", delay=True)
         fh.setLevel(logging.DEBUG)
 
         formatter = logging.Formatter(
@@ -281,7 +298,7 @@ class DeploymentOrchestrator:
 
         # Save metadata
         metadata_path = self.run_dir / "metadata.json"
-        with open(metadata_path, "w") as f:
+        with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
 
         self.logger.info(f"Saved metadata to {metadata_path}")
@@ -309,7 +326,7 @@ class DeploymentOrchestrator:
 
         # Save summary
         summary_path = self.run_dir / "deployments.json"
-        with open(summary_path, "w") as f:
+        with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
 
         self.logger.info(f"Saved deployment summary to {summary_path}")

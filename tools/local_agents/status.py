@@ -133,7 +133,7 @@ def build_local_agent_status(
 
     return {
         "ok": True,
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "repo_runtime_available": True,
         "ds005620_status": ds5620_status,
         "multi_dataset_status": multi_dataset_status,

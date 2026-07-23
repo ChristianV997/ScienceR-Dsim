@@ -26,6 +26,8 @@ import warnings
 
 try:
     import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
     from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
     BOTO_AVAILABLE = True
 except ImportError:
@@ -67,21 +69,22 @@ class NKIRSFetcher:
         self.region = region
         self.profile = profile
 
-        # Create S3 client (public bucket, credentials optional)
+        # Public access is unsigned when no profile is explicitly requested.
+        # Client construction stays offline; fetch/list methods surface actual
+        # connectivity errors when an operation is requested.
         try:
             if profile:
                 session = boto3.Session(profile_name=profile, region_name=region)
+                self.s3_client = session.client("s3", region_name=region)
             else:
                 session = boto3.Session(region_name=region)
-            self.s3_client = session.client("s3", region_name=region)
-            # Test connectivity
-            self.s3_client.head_bucket(Bucket=self.bucket)
-        except (NoCredentialsError, ClientError, ProfileNotFound) as exc:
-            warnings.warn(
-                f"Could not connect to NKI-RS S3 bucket: {exc}. "
-                "NKI-RS is public (CC0), so no credentials are required.",
-                RuntimeWarning,
-            )
+                self.s3_client = session.client(
+                    "s3",
+                    region_name=region,
+                    config=Config(signature_version=UNSIGNED),
+                )
+        except ProfileNotFound as exc:
+            raise RuntimeError(f"AWS profile not found: {profile}") from exc
 
     def _s3_path(self, subject_id: str, session: int, dtype: str) -> str:
         """Build S3 path for a NKI-RS file.

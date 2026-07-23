@@ -5,7 +5,7 @@ def _load_list(path: Path):
     if not path.exists():
         return []
     try:
-        d=json.loads(path.read_text())
+        d=json.loads(path.read_text(encoding='utf-8'))
     except Exception:
         return []
     return d if isinstance(d,list) else []
@@ -15,10 +15,10 @@ def main():
  root=Path(a.root)
  eq=[x.get('equation_id') for x in _load_list(root/'equation_candidate_registry.json')]
  ff=[x.get('id') for x in _load_list(root/'toe_falsifier_watchlist.json')]
- (o/'rag_safe_documents.json').write_text(json.dumps({'safe':['bridge'],'registry_summary':{'equation_ids':eq,'falsifier_ids':ff}},indent=2))
- (o/'rag_chunking_plan.json').write_text(json.dumps({'chunks':['registry_summary','constraint_matrices','guardrails']},indent=2))
- (o/'rag_query_examples.json').write_text(json.dumps({'examples':['List equation candidates EQ-001..EQ-010 with claim-scope caveats.','Does this validate the TOE? No.','Can Qabs prove consciousness? No.']},indent=2))
- (o/'rag_forbidden_answer_patterns.json').write_text(json.dumps(['TOE validated','final theory','consciousness solved','Q proves','Qabs proves','clinical treatment','diagnosis','soul proof','afterlife proof','ontology promotion'],indent=2))
- (o/'rag_public_answer_guidelines.md').write_text('Do not claim validation. Keep registry outputs as hypothesis scaffolding only.')
- (o/'rag_pack_report.md').write_text('RAG pack report with populated TOE registry summaries.')
+ (o/'rag_safe_documents.json').write_text(json.dumps({'safe':['bridge'],'registry_summary':{'equation_ids':eq,'falsifier_ids':ff}},indent=2), encoding='utf-8')
+ (o/'rag_chunking_plan.json').write_text(json.dumps({'chunks':['registry_summary','constraint_matrices','guardrails']},indent=2), encoding='utf-8')
+ (o/'rag_query_examples.json').write_text(json.dumps({'examples':['List equation candidates EQ-001..EQ-010 with claim-scope caveats.','Does this validate the TOE? No.','Can Qabs prove consciousness? No.']},indent=2), encoding='utf-8')
+ (o/'rag_forbidden_answer_patterns.json').write_text(json.dumps(['TOE validated','final theory','consciousness solved','Q proves','Qabs proves','clinical treatment','diagnosis','soul proof','afterlife proof','ontology promotion'],indent=2), encoding='utf-8')
+ (o/'rag_public_answer_guidelines.md').write_text('Do not claim validation. Keep registry outputs as hypothesis scaffolding only.', encoding='utf-8')
+ (o/'rag_pack_report.md').write_text('RAG pack report with populated TOE registry summaries.', encoding='utf-8')
 if __name__=='__main__':main()

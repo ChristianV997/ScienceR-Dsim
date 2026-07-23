@@ -617,7 +617,7 @@ def write_level_t_signal_outputs(
         "topology_status", "warnings",
     ]
     import csv as _csv
-    with open(feat_file, "w", newline="") as f:
+    with open(feat_file, "w", newline="", encoding="utf-8") as f:
         writer = _csv.writer(f)
         writer.writerow(_FEAT_COLS)
         for row_dict in result.topology_rows:
@@ -647,32 +647,32 @@ def write_level_t_signal_outputs(
 
     # 2. topology_quality_report.json
     tqr_file = out_path / "topology_quality_report.json"
-    with open(tqr_file, "w") as f:
+    with open(tqr_file, "w", encoding="utf-8") as f:
         json.dump(result.topology_quality_report, f, indent=2)
     outputs["topology_quality_report"] = str(tqr_file)
 
     # 3. artifact_report.json
     ar_file = out_path / "artifact_report.json"
-    with open(ar_file, "w") as f:
+    with open(ar_file, "w", encoding="utf-8") as f:
         json.dump(result.artifact_report, f, indent=2)
     outputs["artifact_report"] = str(ar_file)
 
     # 4. skipped_windows.json
     sw_file = out_path / "skipped_windows.json"
-    with open(sw_file, "w") as f:
+    with open(sw_file, "w", encoding="utf-8") as f:
         json.dump({"skipped": result.skipped_windows}, f, indent=2)
     outputs["skipped_windows"] = str(sw_file)
 
     # 5. omega_event.json
     omega_file = out_path / "omega_event.json"
-    with open(omega_file, "w") as f:
+    with open(omega_file, "w", encoding="utf-8") as f:
         json.dump(result.omega_event, f, indent=2)
     outputs["omega_event"] = str(omega_file)
 
     # 6. report.md
     md = _build_markdown_report(result)
     md_file = out_path / "report.md"
-    with open(md_file, "w") as f:
+    with open(md_file, "w", encoding="utf-8") as f:
         f.write(md)
     outputs["report"] = str(md_file)
 

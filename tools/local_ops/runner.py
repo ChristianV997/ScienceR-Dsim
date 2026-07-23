@@ -78,7 +78,7 @@ _FORBIDDEN_SUBSTRINGS = [
 
 
 def _ts() -> str:
-    return datetime.datetime.utcnow().isoformat() + "Z"
+    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _load_policy_config(policy_path: str) -> dict:

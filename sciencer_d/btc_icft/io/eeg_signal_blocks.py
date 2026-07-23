@@ -146,7 +146,7 @@ def parse_fixture_signal_file(
         return result
 
     try:
-        with open(p, "r", newline="") as f:
+        with open(p, "r", newline="", encoding="utf-8") as f:
             raw = f.read()
     except Exception as e:
         result.errors.append(f"Could not read file: {e}")
@@ -716,13 +716,13 @@ def write_signal_probe_outputs(
     # 1. signal_block_inventory.json
     inventory = build_signal_block_inventory(result)
     inv_file = out_path / "signal_block_inventory.json"
-    with open(inv_file, "w") as f:
+    with open(inv_file, "w", encoding="utf-8") as f:
         json.dump(inventory, f, indent=2)
     outputs["signal_block_inventory"] = str(inv_file)
 
     # 2. window_inventory.csv
     win_file = out_path / "window_inventory.csv"
-    with open(win_file, "w", newline="") as f:
+    with open(win_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
             "file_path", "row_id", "window_id",
@@ -745,27 +745,27 @@ def write_signal_probe_outputs(
 
     # 3. reader_alignment_report.json
     align_file = out_path / "reader_alignment_report.json"
-    with open(align_file, "w") as f:
+    with open(align_file, "w", encoding="utf-8") as f:
         json.dump(result.reader_alignment_report, f, indent=2)
     outputs["reader_alignment_report"] = str(align_file)
 
     # 4. skipped_files.json
     skip_file = out_path / "skipped_files.json"
-    with open(skip_file, "w") as f:
+    with open(skip_file, "w", encoding="utf-8") as f:
         json.dump({"skipped": result.skipped_files}, f, indent=2)
     outputs["skipped_files"] = str(skip_file)
 
     # 5. omega_event.json
     omega = _build_omega_event(result)
     omega_file = out_path / "omega_event.json"
-    with open(omega_file, "w") as f:
+    with open(omega_file, "w", encoding="utf-8") as f:
         json.dump(omega, f, indent=2)
     outputs["omega_event"] = str(omega_file)
 
     # 6. report.md
     md = _build_markdown_report(result)
     md_file = out_path / "report.md"
-    with open(md_file, "w") as f:
+    with open(md_file, "w", encoding="utf-8") as f:
         f.write(md)
     outputs["report"] = str(md_file)
 

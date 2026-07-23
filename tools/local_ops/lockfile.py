@@ -24,18 +24,24 @@ class LocalOpsLock:
 
 
 def _now_iso() -> str:
-    return datetime.datetime.utcnow().isoformat() + "Z"
+    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _parse_iso(ts: str) -> datetime.datetime:
-    return datetime.datetime.fromisoformat(ts.rstrip("Z"))
+    normalized = ts[:-1] + "+00:00" if ts.endswith("Z") else ts
+    parsed = datetime.datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
 
 
 def is_lock_stale(lock: LocalOpsLock, ttl_seconds: int) -> bool:
     """Return True if the lock was acquired more than ttl_seconds ago."""
     try:
         acquired = _parse_iso(lock.acquired_at)
-        age = (datetime.datetime.utcnow() - acquired).total_seconds()
+        age = (
+            datetime.datetime.now(datetime.timezone.utc) - acquired
+        ).total_seconds()
         return age > ttl_seconds
     except Exception:
         return True

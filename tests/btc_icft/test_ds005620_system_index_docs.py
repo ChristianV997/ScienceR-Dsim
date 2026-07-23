@@ -108,12 +108,12 @@ def test_command_surface_warns_no_auto_execute():
 
 
 def test_artifact_lifecycle_mentions_ontology_evaluation():
-    text = ARTIFACT_LIFECYCLE.read_text()
+    text = ARTIFACT_LIFECYCLE.read_text(encoding="utf-8")
     assert "ontology evaluation" in text.lower()
 
 
 def test_artifact_lifecycle_mentions_evidence_packet():
-    text = ARTIFACT_LIFECYCLE.read_text()
+    text = ARTIFACT_LIFECYCLE.read_text(encoding="utf-8")
     assert "evidence packet" in text.lower()
 
 
@@ -123,7 +123,7 @@ def test_artifact_lifecycle_mentions_evidence_packet():
 
 
 def test_artifact_lifecycle_mock_e2e_not_real_evidence():
-    text = ARTIFACT_LIFECYCLE.read_text()
+    text = ARTIFACT_LIFECYCLE.read_text(encoding="utf-8")
     lower = text.lower()
     # Must contain a statement that mock E2E is not real empirical evidence
     assert "mock e2e" in lower, "Artifact lifecycle missing 'mock E2E' reference"
@@ -190,7 +190,7 @@ def _find_preceding_section_heading(lines: list[str], line_idx: int) -> str:
 
 
 def _check_doc_for_unsafe_phrases(path: Path) -> list[str]:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     violations = []
     for idx, line in enumerate(lines):
